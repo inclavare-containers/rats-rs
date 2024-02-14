@@ -106,7 +106,7 @@ pub fn gen_cert_pem(
     hash_algo: HashAlgo,
     private_key: &AsymmetricPrivateKey,
     evidence_buffer: &[u8],
-    endorsements_buffer: &[u8],
+    endorsements_buffer: Option<&[u8]>,
 ) -> Result<String> {
     let serial_number = SerialNumber::from(42u32);
     let validity = Validity::from_now(Duration::new(5, 0))
@@ -148,10 +148,12 @@ pub fn gen_cert_pem(
                 .kind(ErrorKind::GenCertError)
                 .context("failed to add evidence extension")?;
 
-            builder
-                .add_extension(&DiceEndorsementExtension(endorsements_buffer))
-                .kind(ErrorKind::GenCertError)
-                .context("failed to add endorsement extension")?;
+            if let Some(endorsements_buffer) = endorsements_buffer {
+                builder
+                    .add_extension(&DiceEndorsementExtension(endorsements_buffer))
+                    .kind(ErrorKind::GenCertError)
+                    .context("failed to add endorsement extension")?;
+            }
 
             let certificate: x509_cert::Certificate = builder
                 .build::<$signature_type>()
@@ -203,8 +205,8 @@ pub mod tests {
             "CN=rats-rs,O=Inclavare Containers",
             HashAlgo::Sha256,
             &key,
-            &[0x1u8, 0x2u8, 0x3u8, 0x4u8],
-            &[0x5u8, 0x6u8, 0x7u8, 0x8u8],
+            b"\x01\x02\x03\x04",
+            Some(b"\x05\x06\x07\x08"),
         )?;
         println!("generated pem:\n{}", pem);
         // you can also view the cert manually with https://certificatedecoder.dev/

@@ -71,7 +71,13 @@ impl<A: GenericAttester> CertBuilder<A> {
         let evidence = self.attester.get_evidence(&claims_buffer_hash)?;
         let evidence_buffer = generate_evidence_buffer_with_tag(&evidence, &claims_buffer)?;
 
-        let cert = gen_cert_pem(&self.subject, self.hash_algo, &key, &evidence_buffer, &[])?;
+        let cert = gen_cert_pem(
+            &self.subject,
+            self.hash_algo,
+            &key,
+            &evidence_buffer,
+            Some(&[]),
+        )?;
         Ok(cert)
     }
 }
