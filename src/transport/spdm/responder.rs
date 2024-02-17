@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0 or MIT
 
-use super::crypto_callback::DummySecretAsymSigner;
-use super::secret_impl_sample::DummyMeasurementProvider;
+use super::secret::asym_crypto::DummySecretAsymSigner;
+use super::secret::measurement::DummyMeasurementProvider;
 use super::watchdog_impl_sample::init_watchdog;
 use codec::Codec;
 use common::SpdmTransportEncap;
@@ -25,7 +25,7 @@ extern crate alloc;
 #[cfg(not(feature = "is_sync"))]
 use crate::errors::*;
 use crate::transport::spdm::io::FramedStream;
-use crate::transport::spdm::secret::cert_provider::{FileBasedCertProvider, SpdmCertProvider};
+use crate::transport::spdm::secret::cert::{FileBasedCertProvider, SpdmCertProvider};
 use crate::transport::spdm::transport::SimpleTransportEncap;
 use crate::transport::GenericSecureTransPort;
 use alloc::sync::Arc;

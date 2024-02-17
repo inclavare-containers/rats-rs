@@ -1,11 +1,9 @@
 // mod spdm_emu;
 // mod spdm_requester_emu;
 // mod spdm_responder_emu;
-mod crypto_callback;
 mod io;
 mod requester;
 mod responder;
 mod secret;
-mod secret_impl_sample;
 mod transport;
 mod watchdog_impl_sample;

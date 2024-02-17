@@ -4,14 +4,13 @@
 
 #![forbid(unsafe_code)]
 
-use crate::transport::spdm::secret::cert_provider::FileBasedCertProvider;
-use crate::transport::spdm::secret::cert_provider::SpdmCertProvider;
-use crate::transport::GenericSecureTransPort;
-
-use super::crypto_callback::DummySecretAsymSigner;
 use super::io::FramedStream;
-use super::secret_impl_sample::DummyMeasurementProvider;
+use super::secret::asym_crypto::DummySecretAsymSigner;
+use super::secret::measurement::DummyMeasurementProvider;
 use super::transport::SimpleTransportEncap;
+use crate::transport::spdm::secret::cert::FileBasedCertProvider;
+use crate::transport::spdm::secret::cert::SpdmCertProvider;
+use crate::transport::GenericSecureTransPort;
 use common::SpdmTransportEncap;
 use core::convert::TryFrom;
 use maybe_async::maybe_async;

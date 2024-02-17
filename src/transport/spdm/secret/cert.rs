@@ -2,8 +2,8 @@ use crate::errors::*;
 use spdmlib::protocol::SpdmCertChainData;
 
 pub trait SpdmCertProvider {
-    fn gen_full_cert_chain(&self) -> Result<SpdmCertChainData>;
-    fn gen_root_cert(&self) -> Result<SpdmCertChainData>;
+    fn get_full_cert_chain(&self) -> Result<SpdmCertChainData>;
+    fn get_peer_root_cert(&self) -> Result<SpdmCertChainData>;
 }
 
 pub struct FileBasedCertProvider {
@@ -21,7 +21,7 @@ impl FileBasedCertProvider {
 }
 
 impl SpdmCertProvider for FileBasedCertProvider {
-    fn gen_full_cert_chain(&self) -> Result<SpdmCertChainData> {
+    fn get_full_cert_chain(&self) -> Result<SpdmCertChainData> {
         let mut my_cert_chain_data = SpdmCertChainData {
             ..Default::default()
         };
@@ -69,7 +69,7 @@ impl SpdmCertProvider for FileBasedCertProvider {
         Ok(my_cert_chain_data)
     }
 
-    fn gen_root_cert(&self) -> Result<SpdmCertChainData> {
+    fn get_peer_root_cert(&self) -> Result<SpdmCertChainData> {
         let mut peer_root_cert_data = SpdmCertChainData {
             ..Default::default()
         };
