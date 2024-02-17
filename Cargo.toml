@@ -6,28 +6,46 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = "0.1.77"
+bytes = "1.5.0"
 ciborium = "0.2.2"
+codec = {git = "https://github.com/ccc-spdm-tools/spdm-rs", branch = "main", optional = true, features = ["alloc"]}
+env_logger = "0.11.2"
 hex = "0.4.3"
+log = "0.4.20"
+maybe-async = "0.2.7"
 occlum_dcap = {git = "https://github.com/occlum/occlum", tag = "v0.29.7", optional = true}
 p256 = {version = "0.13.2", optional = true}
 pkcs8 = {version = "0.10.2", features = ["pem"], optional = true}
 rand = "0.8.5"
+ring = {version = "0.17.6", optional = true}
 rsa = {version = "0.9.6", features = ["sha2"], optional = true}
 serde = {version = "1.0", features = ["derive"]}
 serde_bytes = "0.11.14"
 sha2 = {version = "0.10.8", features = ["oid"], optional = true}
 spdmlib = {git = "https://github.com/ccc-spdm-tools/spdm-rs", branch = "main", optional = true, features = ["spdm-ring", "hashed-transcript-data"]}
+spin = {version = "0.9.8"}
 thiserror = "1.0.56"
+tokio = {version = "1.36.0", features = ["full"], optional = true}
 x509-cert = {version = "0.2.5", features = ["builder"], optional = true}
 zeroize = "1.7.0"
 
 [patch."https://github.com/ccc-spdm-tools/spdm-rs"]
+codec = {path = '../spdm-rs/codec'}
 spdmlib = {path = '../spdm-rs/spdmlib'}
 
+# copy from Cargo.toml of spdm-rs
+[patch.crates-io]
+mbedtls-platform-support = {path = "../spdm-rs/spdmlib_crypto_mbedtls/mbedtls-platform-support"}
+ring = {path = "../spdm-rs/external/ring"}
+webpki = {path = "../spdm-rs/external/webpki"}
+
 [features]
+async-tokio = ["dep:tokio"]
 build-mode-host = []
 build-mode-occlum = ["dep:occlum_dcap"]
 build-mode-sgx = []
 crypto-rustcrypto = ["dep:x509-cert", "dep:sha2", "dep:p256", "dep:rsa", "dep:pkcs8"]
-default = ["build-mode-occlum", "crypto-rustcrypto", "transport-spdm"]
-transport-spdm = ["dep:spdmlib"]
+default = ["build-mode-occlum", "crypto-rustcrypto", "transport-spdm", "async-tokio"]
+is_sync = ["maybe-async/is_sync", "spdmlib/is_sync"]
+transport-spdm = ["dep:spdmlib", "dep:codec", "dep:ring"]

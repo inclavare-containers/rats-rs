@@ -12,6 +12,18 @@ pub enum ErrorKind {
 
     ParsePrivateKey,
 
+    SpdmNegotiate,
+
+    SpdmSend,
+
+    SpdmReceive,
+
+    SpdmShutdown,
+
+    SpdmSessionNotReady,
+
+    SpdmBrokenSession,
+
     Unknown,
 }
 
@@ -78,8 +90,15 @@ impl Error {
 }
 
 impl<E: Display> From<E> for Error {
-    fn from(error: E) -> Error {
+    default fn from(error: E) -> Error {
         Error::kind_with_msg(ErrorKind::Unknown, error)
+    }
+}
+
+#[cfg(feature = "transport-spdm")]
+impl From<spdmlib::error::SpdmStatus> for Error {
+    fn from(value: spdmlib::error::SpdmStatus) -> Self {
+        Error::kind_with_msg(ErrorKind::Unknown, format!("{:?}", value))
     }
 }
 

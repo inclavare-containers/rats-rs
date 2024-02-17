@@ -32,6 +32,9 @@ compile_error!("At least one `build-mode-*` feature should be enabled");
 ))]
 compile_error!("more than one `build-mode-*` features cannot be enabled at the same time");
 
+#[cfg(all(feature = "is_sync", feature = "async-tokio"))]
+compile_error!("features `is_sync` and `async-tokio` are mutually exclusive");
+
 #[cfg(test)]
 pub mod tests {
 
