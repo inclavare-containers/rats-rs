@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use spdmlib::secret::SpdmSecretAsymSign;
+use spdmlib::secret::asym_sign::SecretAsymSigner;
 
 use spdmlib::protocol::{
     SpdmBaseAsymAlgo, SpdmBaseHashAlgo, SpdmSignatureStruct, RSAPSS_2048_KEY_SIZE,
@@ -12,78 +12,81 @@ use spdmlib::protocol::{
     RSASSA_4096_KEY_SIZE, SPDM_MAX_ASYM_KEY_SIZE,
 };
 
-pub static SECRET_ASYM_IMPL_INSTANCE: SpdmSecretAsymSign =
-    SpdmSecretAsymSign { sign_cb: asym_sign };
-
 // TODO: dynamic register with cert keys associated
-fn asym_sign(
-    base_hash_algo: SpdmBaseHashAlgo,
-    base_asym_algo: SpdmBaseAsymAlgo,
-    data: &[u8],
-) -> Option<SpdmSignatureStruct> {
-    match (base_hash_algo, base_asym_algo) {
-        (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P256) => {
-            sign_ecdsa_asym_algo(&ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING, data)
-        }
-        (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P384) => {
-            sign_ecdsa_asym_algo(&ring::signature::ECDSA_P384_SHA384_FIXED_SIGNING, data)
-        }
-        (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_2048)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_3072)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_4096) => {
-            sign_rsa_asym_algo(
-                &ring::signature::RSA_PKCS1_SHA256,
-                base_asym_algo.get_size() as usize,
-                data,
-            )
-        }
-        (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_2048)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_3072)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_4096) => {
-            sign_rsa_asym_algo(
-                &ring::signature::RSA_PSS_SHA256,
-                base_asym_algo.get_size() as usize,
-                data,
-            )
-        }
-        (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_2048)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_3072)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_4096) => {
-            sign_rsa_asym_algo(
-                &ring::signature::RSA_PKCS1_SHA384,
-                base_asym_algo.get_size() as usize,
-                data,
-            )
-        }
-        (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_2048)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_3072)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_4096) => {
-            sign_rsa_asym_algo(
-                &ring::signature::RSA_PSS_SHA384,
-                base_asym_algo.get_size() as usize,
-                data,
-            )
-        }
-        (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_2048)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_3072)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_4096) => {
-            sign_rsa_asym_algo(
-                &ring::signature::RSA_PKCS1_SHA512,
-                base_asym_algo.get_size() as usize,
-                data,
-            )
-        }
-        (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_2048)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_3072)
-        | (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_4096) => {
-            sign_rsa_asym_algo(
-                &ring::signature::RSA_PSS_SHA512,
-                base_asym_algo.get_size() as usize,
-                data,
-            )
-        }
-        _ => {
-            panic!();
+
+pub struct DummySecretAsymSigner {}
+
+impl SecretAsymSigner for DummySecretAsymSigner {
+    fn sign(
+        &self,
+        base_hash_algo: SpdmBaseHashAlgo,
+        base_asym_algo: SpdmBaseAsymAlgo,
+        data: &[u8],
+    ) -> Option<SpdmSignatureStruct> {
+        match (base_hash_algo, base_asym_algo) {
+            (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P256) => {
+                sign_ecdsa_asym_algo(&ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING, data)
+            }
+            (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P384) => {
+                sign_ecdsa_asym_algo(&ring::signature::ECDSA_P384_SHA384_FIXED_SIGNING, data)
+            }
+            (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_2048)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_3072)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_4096) => {
+                sign_rsa_asym_algo(
+                    &ring::signature::RSA_PKCS1_SHA256,
+                    base_asym_algo.get_size() as usize,
+                    data,
+                )
+            }
+            (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_2048)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_3072)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_256, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_4096) => {
+                sign_rsa_asym_algo(
+                    &ring::signature::RSA_PSS_SHA256,
+                    base_asym_algo.get_size() as usize,
+                    data,
+                )
+            }
+            (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_2048)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_3072)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_4096) => {
+                sign_rsa_asym_algo(
+                    &ring::signature::RSA_PKCS1_SHA384,
+                    base_asym_algo.get_size() as usize,
+                    data,
+                )
+            }
+            (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_2048)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_3072)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_384, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_4096) => {
+                sign_rsa_asym_algo(
+                    &ring::signature::RSA_PSS_SHA384,
+                    base_asym_algo.get_size() as usize,
+                    data,
+                )
+            }
+            (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_2048)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_3072)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_4096) => {
+                sign_rsa_asym_algo(
+                    &ring::signature::RSA_PKCS1_SHA512,
+                    base_asym_algo.get_size() as usize,
+                    data,
+                )
+            }
+            (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_2048)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_3072)
+            | (SpdmBaseHashAlgo::TPM_ALG_SHA_512, SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_4096) => {
+                sign_rsa_asym_algo(
+                    &ring::signature::RSA_PSS_SHA512,
+                    base_asym_algo.get_size() as usize,
+                    data,
+                )
+            }
+            _ => {
+                panic!();
+            }
         }
     }
 }

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0 or MIT
 
-use super::crypto_callback::SECRET_ASYM_IMPL_INSTANCE;
+use super::crypto_callback::DummySecretAsymSigner;
 use super::secret_impl_sample::DummyMeasurementProvider;
 use super::watchdog_impl_sample::init_watchdog;
 use codec::Codec;
@@ -105,9 +105,6 @@ impl SpdmResonder {
             peer_root_cert_data: gen_array_clone(None, MAX_ROOT_CERT_SUPPORT),
         };
 
-        // TODO:
-        spdmlib::secret::asym_sign::register(SECRET_ASYM_IMPL_INSTANCE.clone());
-
         init_watchdog();
 
         let device_io = Arc::new(Mutex::new(FramedStream::new(stream)));
@@ -118,6 +115,7 @@ impl SpdmResonder {
             device_io,
             transport_encap,
             Box::new(DummyMeasurementProvider {}),
+            Box::new(DummySecretAsymSigner {}),
             config_info,
             provision_info,
         );

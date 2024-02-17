@@ -8,7 +8,7 @@ use crate::transport::spdm::secret::cert_provider::FileBasedCertProvider;
 use crate::transport::spdm::secret::cert_provider::SpdmCertProvider;
 use crate::transport::GenericSecureTransPort;
 
-use super::crypto_callback::SECRET_ASYM_IMPL_INSTANCE;
+use super::crypto_callback::DummySecretAsymSigner;
 use super::io::FramedStream;
 use super::secret_impl_sample::DummyMeasurementProvider;
 use super::transport::SimpleTransportEncap;
@@ -23,6 +23,8 @@ use spdmlib::config::MAX_ROOT_CERT_SUPPORT;
 use spdmlib::message::*;
 use spdmlib::protocol::*;
 use spdmlib::requester;
+use spdmlib::secret::asym_sign::DefaultSecretAsymSigner;
+use spdmlib::secret::asym_sign::SecretAsymSigner;
 use spin::Mutex;
 use std::io::Read;
 use std::io::Write;
@@ -89,7 +91,6 @@ impl SpdmRequester {
         peer_root_cert_data_list[0] = Some(peer_root_cert_data);
 
         let provision_info = if cfg!(feature = "mut-auth") {
-            spdmlib::secret::asym_sign::register(SECRET_ASYM_IMPL_INSTANCE.clone());
             let my_cert_chain_data = cert_provider.gen_full_cert_chain().unwrap();
 
             common::SpdmProvisionInfo {
@@ -114,6 +115,13 @@ impl SpdmRequester {
             }
         };
 
+        let asym_signer = if cfg!(feature = "mut-auth") {
+            Box::new(DummySecretAsymSigner {}) as Box<dyn SecretAsymSigner + Send + Sync + 'static>
+        } else {
+            Box::new(DefaultSecretAsymSigner {})
+                as Box<dyn SecretAsymSigner + Send + Sync + 'static>
+        };
+
         let device_io = Arc::new(Mutex::new(FramedStream::new(stream)));
         let transport_encap: Arc<Mutex<(dyn SpdmTransportEncap + Send + Sync)>> =
             Arc::new(Mutex::new(SimpleTransportEncap {}));
@@ -122,6 +130,7 @@ impl SpdmRequester {
             device_io,
             transport_encap,
             Box::new(DummyMeasurementProvider {}),
+            asym_signer,
             config_info,
             provision_info,
         );
