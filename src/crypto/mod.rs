@@ -6,37 +6,40 @@ use pkcs8::{
     der::DecodePem, DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding,
     PrivateKeyInfo, SecretDocument,
 };
+use rsa::traits::PublicKeyParts;
 use sha2::Digest as _;
 use zeroize::Zeroizing;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum HashAlgo {
     Sha256,
     Sha384,
     Sha512,
 }
 
-// impl HashAlgo {
-//     fn hash() -> Vec<> {}
-// }
-
-#[derive(Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum AsymmetricAlgo {
+    Rsa2048,
     Rsa3072,
-    Ecc256,
+    Rsa4096,
+    P256,
 }
 
 // TODO: try refactor AsymmetricPrivateKey to AsymmetricAlgo + trait object
 #[derive(Debug)]
 pub enum AsymmetricPrivateKey {
-    Rsa(rsa::RsaPrivateKey),
+    Rsa2048(rsa::RsaPrivateKey),
+    Rsa3072(rsa::RsaPrivateKey),
+    Rsa4096(rsa::RsaPrivateKey),
     P256(p256::SecretKey),
 }
 
 impl AsymmetricPrivateKey {
     pub fn to_pkcs8_pem(&self) -> Result<Zeroizing<String>> {
         Ok(match self {
-            AsymmetricPrivateKey::Rsa(key) => key.to_pkcs8_pem(LineEnding::LF)?,
+            AsymmetricPrivateKey::Rsa2048(key)
+            | AsymmetricPrivateKey::Rsa3072(key)
+            | AsymmetricPrivateKey::Rsa4096(key) => key.to_pkcs8_pem(LineEnding::LF)?,
             AsymmetricPrivateKey::P256(key) => key.to_pkcs8_pem(LineEnding::LF)?,
         })
     }
@@ -46,7 +49,16 @@ impl AsymmetricPrivateKey {
         // PrivateKeyInfo::from_pem(label)?;
 
         if let Ok(key) = rsa::RsaPrivateKey::from_pkcs8_pem(&private_key_pkcs8) {
-            return Ok(AsymmetricPrivateKey::Rsa(key));
+            let bit_len = key.n().bits();
+            match bit_len {
+                2048 => Ok(AsymmetricPrivateKey::Rsa2048(key)),
+                3072 => Ok(AsymmetricPrivateKey::Rsa3072(key)),
+                4096 => Ok(AsymmetricPrivateKey::Rsa4096(key)),
+                _ => Err(Error::kind_with_msg(
+                    ErrorKind::ParsePrivateKey,
+                    format!("unsupported rsa modulus bit length: {}", bit_len),
+                )),
+            }
         } else {
             match p256::SecretKey::from_pkcs8_pem(&private_key_pkcs8) {
                 Ok(key) => return Ok(AsymmetricPrivateKey::P256(key)),
@@ -67,10 +79,16 @@ impl DefaultCrypto {
     pub fn gen_private_key(algo: AsymmetricAlgo) -> Result<AsymmetricPrivateKey> {
         let mut rng = rand::rngs::OsRng;
         match algo {
-            AsymmetricAlgo::Rsa3072 => Ok(AsymmetricPrivateKey::Rsa(rsa::RsaPrivateKey::new(
+            AsymmetricAlgo::Rsa2048 => Ok(AsymmetricPrivateKey::Rsa2048(rsa::RsaPrivateKey::new(
+                &mut rng, 2048,
+            )?)),
+            AsymmetricAlgo::Rsa3072 => Ok(AsymmetricPrivateKey::Rsa3072(rsa::RsaPrivateKey::new(
                 &mut rng, 3072,
             )?)),
-            AsymmetricAlgo::Ecc256 => Ok(AsymmetricPrivateKey::P256(p256::SecretKey::random(
+            AsymmetricAlgo::Rsa4096 => Ok(AsymmetricPrivateKey::Rsa4096(rsa::RsaPrivateKey::new(
+                &mut rng, 4096,
+            )?)),
+            AsymmetricAlgo::P256 => Ok(AsymmetricPrivateKey::P256(p256::SecretKey::random(
                 &mut rng,
             ))),
         }
@@ -82,7 +100,9 @@ impl DefaultCrypto {
         private_key: &AsymmetricPrivateKey,
     ) -> Result<Vec<u8>> {
         let spki_doc = match private_key {
-            AsymmetricPrivateKey::Rsa(key) => key.to_public_key().to_public_key_der(),
+            AsymmetricPrivateKey::Rsa2048(key)
+            | AsymmetricPrivateKey::Rsa3072(key)
+            | AsymmetricPrivateKey::Rsa4096(key) => key.to_public_key().to_public_key_der(),
             AsymmetricPrivateKey::P256(key) => key.public_key().to_public_key_der(),
         }?;
         let bytes = spki_doc.as_bytes();
@@ -106,8 +126,13 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn test_gen_cert() -> Result<()> {
-        for algo in [AsymmetricAlgo::Ecc256, AsymmetricAlgo::Rsa3072] {
+    fn test_gen_private_key() -> Result<()> {
+        for algo in [
+            AsymmetricAlgo::Rsa2048,
+            AsymmetricAlgo::Rsa3072,
+            AsymmetricAlgo::Rsa4096,
+            AsymmetricAlgo::P256,
+        ] {
             let key = DefaultCrypto::gen_private_key(algo)?.to_pkcs8_pem()?;
             println!("generated {:?} key:\n{}", algo, key.as_str());
         }

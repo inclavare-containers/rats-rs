@@ -11,5 +11,7 @@ pub trait GenericAttester {
 pub trait GenericEvidence {
     const DICE_OCBR_TAG: u64;
 
-    fn get_raw_evidence(&self) -> &[u8];
+    fn get_raw_evidence_dice(&self) -> &[u8];
+
+    fn from_raw_evidence(bytes: &[u8]) -> Self;
 }

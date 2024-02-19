@@ -2,12 +2,11 @@
 
 mod attester;
 mod cert;
+mod claims;
 mod crypto;
+mod errors;
 mod transport;
 mod verifier;
-
-mod errors;
-// TODO: add a crypto layer
 
 #[cfg(not(any(
     feature = "build-mode-host",
@@ -41,12 +40,12 @@ pub mod tests {
     use self::{
         attester::{sgx_dcap::SgxDcapAttester, GenericAttester},
         cert::dice::{
-            element::{generate_claims_buffer, generate_evidence_buffer_with_tag, Claims},
-            gen_cert_pem,
+            fields::{generate_claims_buffer, generate_evidence_buffer_with_tag},
+            gen_cert,
         },
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
     };
-    use crate::{cert::CertBuilder, errors::*};
+    use crate::{cert::CertBuilder, claims::Claims, errors::*};
 
     use super::*;
 
@@ -60,7 +59,7 @@ pub mod tests {
 
         let (cert, private_key) = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims)
-            .build_pem(AsymmetricAlgo::Ecc256)?;
+            .build_pem(AsymmetricAlgo::P256)?;
 
         println!("generated cert:\n{}", cert);
         println!("generated private_key:\n{}", private_key.as_str());

@@ -1,6 +1,6 @@
 use super::{GenericAttester, GenericEvidence};
 use crate::{
-    cert::dice::element::OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE,
+    cert::dice::fields::OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE,
     errors::{Error, ErrorKind},
 };
 
@@ -55,7 +55,11 @@ pub struct SgxDcapEvidence {
 impl GenericEvidence for SgxDcapEvidence {
     const DICE_OCBR_TAG: u64 = OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE;
 
-    fn get_raw_evidence(&self) -> &[u8] {
+    fn get_raw_evidence_dice(&self) -> &[u8] {
         self.data.as_slice()
+    }
+
+    fn from_raw_evidence(bytes: &[u8]) -> Self {
+        Self { data: bytes.into() }
     }
 }

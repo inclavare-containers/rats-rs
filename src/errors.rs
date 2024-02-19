@@ -4,11 +4,27 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ErrorKind {
+    VerifierSgxEcdsaVerifyQuoteFailed,
+
+    VerifierSgxEcdsaGetSupplementalDataFailed,
+
+    VerifierSgxEcdsaMulformedQuote,
+
+    VerifierSgxEcdsaReportDataMismatch,
+
     InvalidParameter,
 
     Unsupported,
 
     GenCertError,
+
+    ParseCertError,
+
+    CertVerifySignatureFailed,
+
+    CertExtractExtensionFailed,
+
+    CertVerifyPublicKeyHashFailed,
 
     ParsePrivateKey,
 
