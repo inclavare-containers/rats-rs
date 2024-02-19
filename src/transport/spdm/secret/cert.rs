@@ -1,5 +1,8 @@
-use crate::errors::*;
-use spdmlib::protocol::SpdmCertChainData;
+use crate::{errors::*, verifier::sgx_dcap::SgxDcapVerifier};
+use spdmlib::{
+    crypto::cert_operation::CertValidationStrategy, error::SPDM_STATUS_INVALID_CERT,
+    protocol::SpdmCertChainData,
+};
 
 pub trait CertProvider {
     fn get_full_cert_chain(&self) -> Option<SpdmCertChainData>;
@@ -44,6 +47,49 @@ pub struct EmptyValidationContext {}
 impl ValidationContext for EmptyValidationContext {
     fn get_peer_root_cert(&self) -> Option<SpdmCertChainData> {
         None
+    }
+}
+
+pub struct RatsCertValidationStrategy {}
+
+impl CertValidationStrategy for RatsCertValidationStrategy {
+    fn verify_cert_chain(&self, cert_chain: &[u8]) -> spdmlib::error::SpdmResult {
+        // TODO: check evidence type and choose Verifier
+        match crate::cert::verify_cert_der(cert_chain, &SgxDcapVerifier::new()) {
+            Ok(claims) => {
+                // TODO: check BUILT_IN_CLAIM_SGX_MR_ENCLAVE etc.
+                log::info!(
+                    "{}:\t{}",
+                    crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE,
+                    hex::encode(
+                        &claims[crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE]
+                    ),
+                );
+                log::info!(
+                    "{}:\t{}",
+                    crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER,
+                    hex::encode(
+                        &claims[crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER]
+                    ),
+                );
+                Ok(())
+            }
+            Err(e) => {
+                log::error!(
+                    "RatsCertValidationStrategy::verify_cert_chain() failed: {:?}",
+                    e
+                );
+                Err(SPDM_STATUS_INVALID_CERT)
+            }
+        }
+    }
+
+    fn need_check_leaf_certificate(&self) -> bool {
+        false
+    }
+
+    fn need_check_cert_chain_provisioned(&self) -> bool {
+        false
     }
 }
 

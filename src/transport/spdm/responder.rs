@@ -11,6 +11,7 @@ use core::convert::TryFrom;
 use maybe_async::maybe_async;
 use spdmlib::common::session::SpdmSessionState;
 use spdmlib::common::{SecuredMessageVersion, SpdmOpaqueSupport};
+use spdmlib::crypto::cert_operation::CertValidationStrategy;
 use spdmlib::secret::asym_sign::SecretAsymSigner;
 use std::io::{Read, Write};
 // TODO: secret_impl_sample for measurements
@@ -38,6 +39,7 @@ impl SpdmResonder {
         cert_provider: Box<dyn CertProvider>,
         validation_context: Box<dyn ValidationContext>,
         asym_signer: Box<dyn SecretAsymSigner + Send + Sync>,
+        cert_validation_strategy: Box<dyn CertValidationStrategy + Send + Sync>,
     ) -> Self
     where
         S: Read + Write + Send + Sync + 'static,
@@ -100,6 +102,7 @@ impl SpdmResonder {
             transport_encap,
             Box::new(DummyMeasurementProvider {}),
             asym_signer,
+            cert_validation_strategy,
             config_info,
             provision_info,
         );
@@ -289,6 +292,8 @@ impl GenericSecureTransPort for SpdmResonder {
 #[cfg(test)]
 pub mod tests {
 
+    use spdmlib::crypto::cert_operation::DefaultCertValidationStrategy;
+
     use crate::{
         attester::sgx_dcap::SgxDcapAttester,
         cert::CertBuilder,
@@ -297,7 +302,7 @@ pub mod tests {
             asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
             cert::{
                 tests::{DummyCertProvider, DummyValidationContext},
-                EmptyValidationContext, RatsCertProvider,
+                EmptyValidationContext, RatsCertProvider, RatsCertValidationStrategy,
             },
         },
     };
@@ -308,12 +313,12 @@ pub mod tests {
 
     #[maybe_async::maybe_async]
     pub async fn run_responder(test_dummy: bool, stream: TcpStream) -> Result<()> {
-        let (cert_provider, asym_signer) = if test_dummy {
-            let cert_provider = Box::new(DummyCertProvider::new(true, false));
-            let asym_signer = Box::new(DummySecretAsymSigner {});
+        let (cert_provider, asym_signer, cert_validation_strategy) = if test_dummy {
             (
-                cert_provider as Box<dyn CertProvider>,
-                asym_signer as Box<dyn SecretAsymSigner + Send + Sync>,
+                Box::new(DummyCertProvider::new(true, false)) as Box<dyn CertProvider>,
+                Box::new(DummySecretAsymSigner {}) as Box<dyn SecretAsymSigner + Send + Sync>,
+                Box::new(DefaultCertValidationStrategy {})
+                    as Box<dyn CertValidationStrategy + Send + Sync>,
             )
         } else {
             let attester = SgxDcapAttester::new();
@@ -323,10 +328,10 @@ pub mod tests {
             (
                 Box::new(RatsCertProvider::new(cert)) as Box<dyn CertProvider>,
                 Box::new(RatsSecretAsymSigner::new(key)) as Box<dyn SecretAsymSigner + Send + Sync>,
+                Box::new(RatsCertValidationStrategy {})
+                    as Box<dyn CertValidationStrategy + Send + Sync>,
             )
         };
-
-        // TODO: verify cert
 
         let validation_context = if cfg!(feature = "mut-auth") && test_dummy {
             Box::new(DummyValidationContext::new(true)) as Box<dyn ValidationContext>
@@ -334,8 +339,13 @@ pub mod tests {
             Box::new(EmptyValidationContext {}) as Box<dyn ValidationContext>
         };
 
-        let mut responder =
-            SpdmResonder::new(stream, cert_provider, validation_context, asym_signer);
+        let mut responder = SpdmResonder::new(
+            stream,
+            cert_provider,
+            validation_context,
+            asym_signer,
+            cert_validation_strategy,
+        );
         responder.negotiate().await?;
 
         for i in 1024..2048u32 {
@@ -361,7 +371,7 @@ pub mod tests {
 
     #[test]
     fn test_spdm_over_tcp() -> Result<()> {
-        let test_dummy = false;
+        let test_dummy = true; /* set this to `false`` for testing with dice cert */
 
         let t1 = std::thread::spawn(move || {
             let listener =

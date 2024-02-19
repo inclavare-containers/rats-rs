@@ -1,4 +1,4 @@
-mod claims;
+pub mod claims;
 
 use std::{
     mem,
