@@ -5,11 +5,10 @@
 #![forbid(unsafe_code)]
 
 use super::io::FramedStream;
-use super::secret::asym_crypto::DummySecretAsymSigner;
+use super::secret::cert::CertProvider;
+use super::secret::cert::ValidationContext;
 use super::secret::measurement::DummyMeasurementProvider;
 use super::transport::SimpleTransportEncap;
-use crate::transport::spdm::secret::cert::FileBasedCertProvider;
-use crate::transport::spdm::secret::cert::SpdmCertProvider;
 use crate::transport::GenericSecureTransPort;
 use common::SpdmTransportEncap;
 use core::convert::TryFrom;
@@ -18,11 +17,9 @@ use spdmlib::common;
 use spdmlib::common::SecuredMessageVersion;
 use spdmlib::common::SpdmOpaqueSupport;
 use spdmlib::config;
-use spdmlib::config::MAX_ROOT_CERT_SUPPORT;
 use spdmlib::message::*;
 use spdmlib::protocol::*;
 use spdmlib::requester;
-use spdmlib::secret::asym_sign::DefaultSecretAsymSigner;
 use spdmlib::secret::asym_sign::SecretAsymSigner;
 use spin::Mutex;
 use std::io::Read;
@@ -38,8 +35,9 @@ struct SpdmRequester {
 impl SpdmRequester {
     pub fn new<S>(
         stream: S,
-        base_asym_algo: SpdmBaseAsymAlgo,
-        req_asym_algo: SpdmReqAsymAlgo,
+        cert_provider: Box<dyn CertProvider>,
+        validation_context: Box<dyn ValidationContext>,
+        asym_signer: Box<dyn SecretAsymSigner + Send + Sync>,
     ) -> Self
     where
         S: Read + Write + Send + Sync + 'static,
@@ -67,11 +65,13 @@ impl SpdmRequester {
             req_capabilities,
             req_ct_exponent: 0,
             measurement_specification: SpdmMeasurementSpecification::DMTF,
-            base_asym_algo: base_asym_algo,
-            base_hash_algo: SpdmBaseHashAlgo::TPM_ALG_SHA_384,
+            base_asym_algo: SpdmBaseAsymAlgo::all(),
+            base_hash_algo: asym_signer.supported_algo().0,
             dhe_algo: SpdmDheAlgo::SECP_384_R1,
             aead_algo: SpdmAeadAlgo::AES_256_GCM,
-            req_asym_algo: req_asym_algo,
+            req_asym_algo: SpdmReqAsymAlgo::from_bits_truncate(
+                asym_signer.supported_algo().1.bits() as u16,
+            ), /* cast here */
             key_schedule_algo: SpdmKeyScheduleAlgo::SPDM_KEY_SCHEDULE,
             opaque_support: SpdmOpaqueSupport::OPAQUE_DATA_FMT1,
             data_transfer_size: config::MAX_SPDM_MSG_SIZE as u32,
@@ -83,43 +83,9 @@ impl SpdmRequester {
             ..Default::default()
         };
 
-        let cert_provider = FileBasedCertProvider::new(true, true);
-        let peer_root_cert_data = cert_provider.gen_root_cert().unwrap();
-
-        let mut peer_root_cert_data_list = gen_array_clone(None, MAX_ROOT_CERT_SUPPORT);
-        peer_root_cert_data_list[0] = Some(peer_root_cert_data);
-
-        let provision_info = if cfg!(feature = "mut-auth") {
-            let my_cert_chain_data = cert_provider.gen_full_cert_chain().unwrap();
-
-            common::SpdmProvisionInfo {
-                my_cert_chain_data: [
-                    Some(my_cert_chain_data),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ],
-                my_cert_chain: [None, None, None, None, None, None, None, None],
-                peer_root_cert_data: peer_root_cert_data_list,
-            }
-        } else {
-            common::SpdmProvisionInfo {
-                my_cert_chain_data: [None, None, None, None, None, None, None, None],
-                my_cert_chain: [None, None, None, None, None, None, None, None],
-                peer_root_cert_data: peer_root_cert_data_list,
-            }
-        };
-
-        let asym_signer = if cfg!(feature = "mut-auth") {
-            Box::new(DummySecretAsymSigner {}) as Box<dyn SecretAsymSigner + Send + Sync + 'static>
-        } else {
-            Box::new(DefaultSecretAsymSigner {})
-                as Box<dyn SecretAsymSigner + Send + Sync + 'static>
-        };
+        let mut provision_info = common::SpdmProvisionInfo::default();
+        provision_info.my_cert_chain_data[0] = cert_provider.get_full_cert_chain();
+        provision_info.peer_root_cert_data[0] = validation_context.get_peer_root_cert();
 
         let device_io = Arc::new(Mutex::new(FramedStream::new(stream)));
         let transport_encap: Arc<Mutex<(dyn SpdmTransportEncap + Send + Sync)>> =
@@ -145,47 +111,39 @@ impl SpdmRequester {
 impl GenericSecureTransPort for SpdmRequester {
     async fn negotiate(&mut self) -> Result<()> {
         let mut transcript_vca = None;
-        if self
-            .context
+        self.context
             .init_connection(&mut transcript_vca)
             .await
-            .is_err()
-        {
-            panic!("init_connection failed!");
-        }
+            .kind(ErrorKind::SpdmNegotiate)
+            .context("init_connection failed")?;
 
-        if self.context.send_receive_spdm_digest(None).await.is_err() {
-            panic!("send_receive_spdm_digest failed!");
-        }
+        self.context
+            .send_receive_spdm_digest(None)
+            .await
+            .kind(ErrorKind::SpdmNegotiate)
+            .context("send_receive_spdm_digest failed")?;
 
-        if self
-            .context
+        self.context
             .send_receive_spdm_certificate(None, 0)
             .await
-            .is_err()
-        {
-            panic!("send_receive_spdm_certificate failed!");
-        }
+            .kind(ErrorKind::SpdmNegotiate)
+            .context("send_receive_spdm_certificate failed")?;
 
-        if self
-            .context
+        self.context
             .send_receive_spdm_challenge(
                 0,
                 SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeNone,
             )
             .await
-            .is_err()
-        {
-            panic!("send_receive_spdm_challenge failed!");
-        }
+            .kind(ErrorKind::SpdmNegotiate)
+            .context("send_receive_spdm_challenge failed")?;
 
         let mut total_number: u8 = 0;
         let mut spdm_measurement_record_structure = SpdmMeasurementRecordStructure::default();
         let mut content_changed = None;
         let mut transcript_meas = None;
 
-        if self
-            .context
+        self.context
             .send_receive_spdm_measurement(
                 None,
                 0,
@@ -197,32 +155,29 @@ impl GenericSecureTransPort for SpdmRequester {
                 &mut transcript_meas,
             )
             .await
-            .is_err()
-        {
-            panic!("send_receive_spdm_measurement failed!");
-        }
+            .kind(ErrorKind::SpdmNegotiate)
+            .context("send_receive_spdm_measurement failed")?;
 
         if transcript_meas.is_none() {
-            panic!("get message_m from send_receive_spdm_measurement failed!");
+            Err(Error::kind_with_msg(
+                ErrorKind::SpdmNegotiate,
+                "get message_m from send_receive_spdm_measurement failed",
+            ))?;
         }
 
-        let result = self
+        let session_id = self
             .context
             .start_session(
                 false,
                 0,
                 SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeNone,
             )
-            .await;
-        match result {
-            Ok(session_id) => {
-                self.session_id = Some(session_id);
-                Ok(())
-            }
-            Err(e) => Err(e)
-                .kind(ErrorKind::SpdmNegotiate)
-                .context("failed to setup session"),
-        }
+            .await
+            .kind(ErrorKind::SpdmNegotiate)
+            .context("failed to setup session")?;
+
+        self.session_id = Some(session_id);
+        Ok(())
     }
 
     async fn send(&mut self, bytes: &[u8]) -> Result<()> {
@@ -277,16 +232,60 @@ impl GenericSecureTransPort for SpdmRequester {
 #[cfg(test)]
 pub mod tests {
 
+    use spdmlib::secret::asym_sign::DefaultSecretAsymSigner;
+
+    use crate::{
+        attester::sgx_dcap::SgxDcapAttester,
+        cert::CertBuilder,
+        crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
+        transport::spdm::secret::{
+            asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
+            cert::{
+                tests::{DummyCertProvider, DummyValidationContext},
+                EmptyCertProvider, EmptyValidationContext, RatsCertProvider,
+            },
+        },
+    };
+
     use super::*;
     use std::net::TcpStream;
 
     #[maybe_async::maybe_async]
-    async fn run_requester(
-        stream: TcpStream,
-        base_asym_algo: SpdmBaseAsymAlgo,
-        req_asym_algo: SpdmReqAsymAlgo,
-    ) -> Result<()> {
-        let mut requester = SpdmRequester::new(stream, base_asym_algo, req_asym_algo);
+    pub async fn run_requester(test_dummy: bool, stream: TcpStream) -> Result<()> {
+        let (cert_provider, asym_signer) = if cfg!(feature = "mut-auth") {
+            if test_dummy {
+                (
+                    Box::new(DummyCertProvider::new(true, true)) as Box<dyn CertProvider>,
+                    Box::new(DummySecretAsymSigner {})
+                        as Box<dyn SecretAsymSigner + Send + Sync + 'static>,
+                )
+            } else {
+                let attester = SgxDcapAttester::new();
+                let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
+                let cert = CertBuilder::new(attester, HashAlgo::Sha256)
+                    .build_der_with_private_key(&key)?;
+                (
+                    Box::new(RatsCertProvider::new(cert)) as Box<dyn CertProvider>,
+                    Box::new(RatsSecretAsymSigner::new(key))
+                        as Box<dyn SecretAsymSigner + Send + Sync>,
+                )
+            }
+        } else {
+            (
+                Box::new(EmptyCertProvider {}) as Box<dyn CertProvider>,
+                Box::new(DefaultSecretAsymSigner {})
+                    as Box<dyn SecretAsymSigner + Send + Sync + 'static>,
+            )
+        };
+
+        let validation_context = if test_dummy {
+            Box::new(DummyValidationContext::new(true)) as Box<dyn ValidationContext>
+        } else {
+            Box::new(EmptyValidationContext {}) as Box<dyn ValidationContext>
+        };
+
+        let mut requester =
+            SpdmRequester::new(stream, cert_provider, validation_context, asym_signer);
         requester.negotiate().await?;
 
         for i in 0..1024u32 {
@@ -306,32 +305,6 @@ pub mod tests {
         }
 
         // requester.shutdown().await?;
-        Ok(())
-    }
-
-    #[test]
-    fn test_spdm_over_tcp() -> Result<()> {
-        let stream =
-            TcpStream::connect("127.0.0.1:2323").expect("Couldn't connect to the server...");
-
-        let base_asymalgo = SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P384; // SpdmBaseAsymAlgo::TPM_ALG_RSASSA_3072
-        let req_asym_algo = SpdmReqAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P384; // SpdmReqAsymAlgo::TPM_ALG_RSASSA_3072
-
-        #[cfg(not(feature = "is_sync"))]
-        {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(Box::pin(run_requester(
-                stream,
-                base_asymalgo,
-                req_asym_algo,
-            )))
-            .unwrap();
-        }
-
-        #[cfg(feature = "is_sync")]
-        {
-            run_requester(stream, base_asymalgo, req_asym_algo).unwrap();
-        }
         Ok(())
     }
 }

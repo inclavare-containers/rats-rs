@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0 or MIT
 
-use super::secret::asym_crypto::DummySecretAsymSigner;
+use super::secret::cert::{CertProvider, ValidationContext};
 use super::secret::measurement::DummyMeasurementProvider;
 use super::watchdog_impl_sample::init_watchdog;
 use codec::Codec;
@@ -11,7 +11,7 @@ use core::convert::TryFrom;
 use maybe_async::maybe_async;
 use spdmlib::common::session::SpdmSessionState;
 use spdmlib::common::{SecuredMessageVersion, SpdmOpaqueSupport};
-use spdmlib::config::MAX_ROOT_CERT_SUPPORT;
+use spdmlib::secret::asym_sign::SecretAsymSigner;
 use std::io::{Read, Write};
 // TODO: secret_impl_sample for measurements
 // use spdm_emu::{secret_impl_sample::*, EMU_STACK_SIZE};
@@ -22,10 +22,8 @@ use spdmlib::{
 };
 use spin::Mutex;
 extern crate alloc;
-#[cfg(not(feature = "is_sync"))]
 use crate::errors::*;
 use crate::transport::spdm::io::FramedStream;
-use crate::transport::spdm::secret::cert::{FileBasedCertProvider, SpdmCertProvider};
 use crate::transport::spdm::transport::SimpleTransportEncap;
 use crate::transport::GenericSecureTransPort;
 use alloc::sync::Arc;
@@ -37,8 +35,9 @@ struct SpdmResonder {
 impl SpdmResonder {
     pub fn new<S>(
         stream: S,
-        base_asym_algo: SpdmBaseAsymAlgo,
-        req_asym_algo: SpdmReqAsymAlgo,
+        cert_provider: Box<dyn CertProvider>,
+        validation_context: Box<dyn ValidationContext>,
+        asym_signer: Box<dyn SecretAsymSigner + Send + Sync>,
     ) -> Self
     where
         S: Read + Write + Send + Sync + 'static,
@@ -69,11 +68,11 @@ impl SpdmResonder {
             rsp_ct_exponent: 0,
             measurement_specification: SpdmMeasurementSpecification::DMTF,
             measurement_hash_algo: SpdmMeasurementHashAlgo::TPM_ALG_SHA_384,
-            base_asym_algo: base_asym_algo,
-            base_hash_algo: SpdmBaseHashAlgo::TPM_ALG_SHA_384,
+            base_asym_algo: asym_signer.supported_algo().1,
+            base_hash_algo: asym_signer.supported_algo().0,
             dhe_algo: SpdmDheAlgo::SECP_384_R1,
             aead_algo: SpdmAeadAlgo::AES_256_GCM,
-            req_asym_algo: req_asym_algo,
+            req_asym_algo: SpdmReqAsymAlgo::all(),
             key_schedule_algo: SpdmKeyScheduleAlgo::SPDM_KEY_SCHEDULE,
             opaque_support: SpdmOpaqueSupport::OPAQUE_DATA_FMT1,
             data_transfer_size: config::MAX_SPDM_MSG_SIZE as u32,
@@ -86,24 +85,9 @@ impl SpdmResonder {
             ..Default::default()
         };
 
-        let my_cert_chain_data = FileBasedCertProvider::new(true, false)
-            .gen_full_cert_chain()
-            .unwrap();
-
-        let provision_info = common::SpdmProvisionInfo {
-            my_cert_chain_data: [
-                Some(my_cert_chain_data),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-            ],
-            my_cert_chain: [None, None, None, None, None, None, None, None],
-            peer_root_cert_data: gen_array_clone(None, MAX_ROOT_CERT_SUPPORT),
-        };
+        let mut provision_info = common::SpdmProvisionInfo::default();
+        provision_info.my_cert_chain_data[0] = cert_provider.get_full_cert_chain();
+        provision_info.peer_root_cert_data[0] = validation_context.get_peer_root_cert();
 
         init_watchdog();
 
@@ -115,7 +99,7 @@ impl SpdmResonder {
             device_io,
             transport_encap,
             Box::new(DummyMeasurementProvider {}),
-            Box::new(DummySecretAsymSigner {}),
+            asym_signer,
             config_info,
             provision_info,
         );
@@ -305,16 +289,53 @@ impl GenericSecureTransPort for SpdmResonder {
 #[cfg(test)]
 pub mod tests {
 
+    use crate::{
+        attester::sgx_dcap::SgxDcapAttester,
+        cert::CertBuilder,
+        crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
+        transport::spdm::secret::{
+            asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
+            cert::{
+                tests::{DummyCertProvider, DummyValidationContext},
+                EmptyValidationContext, RatsCertProvider,
+            },
+        },
+    };
+
+    use super::super::requester::tests::run_requester;
     use super::*;
     use std::net::{TcpListener, TcpStream};
 
     #[maybe_async::maybe_async]
-    async fn run_responder(
-        stream: TcpStream,
-        base_asym_algo: SpdmBaseAsymAlgo,
-        req_asym_algo: SpdmReqAsymAlgo,
-    ) -> Result<()> {
-        let mut responder = SpdmResonder::new(stream, base_asym_algo, req_asym_algo);
+    pub async fn run_responder(test_dummy: bool, stream: TcpStream) -> Result<()> {
+        let (cert_provider, asym_signer) = if test_dummy {
+            let cert_provider = Box::new(DummyCertProvider::new(true, false));
+            let asym_signer = Box::new(DummySecretAsymSigner {});
+            (
+                cert_provider as Box<dyn CertProvider>,
+                asym_signer as Box<dyn SecretAsymSigner + Send + Sync>,
+            )
+        } else {
+            let attester = SgxDcapAttester::new();
+            let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
+            let cert =
+                CertBuilder::new(attester, HashAlgo::Sha256).build_der_with_private_key(&key)?;
+            (
+                Box::new(RatsCertProvider::new(cert)) as Box<dyn CertProvider>,
+                Box::new(RatsSecretAsymSigner::new(key)) as Box<dyn SecretAsymSigner + Send + Sync>,
+            )
+        };
+
+        // TODO: verify cert
+
+        let validation_context = if cfg!(feature = "mut-auth") && test_dummy {
+            Box::new(DummyValidationContext::new(true)) as Box<dyn ValidationContext>
+        } else {
+            Box::new(EmptyValidationContext {}) as Box<dyn ValidationContext>
+        };
+
+        let mut responder =
+            SpdmResonder::new(stream, cert_provider, validation_context, asym_signer);
         responder.negotiate().await?;
 
         for i in 1024..2048u32 {
@@ -340,28 +361,48 @@ pub mod tests {
 
     #[test]
     fn test_spdm_over_tcp() -> Result<()> {
-        let listener = TcpListener::bind("127.0.0.1:2323").expect("Couldn't bind to the server");
-        println!("server start!");
+        let test_dummy = false;
 
-        loop {
+        let t1 = std::thread::spawn(move || {
+            let listener =
+                TcpListener::bind("127.0.0.1:2323").expect("Couldn't bind to the server");
+            println!("server start!");
+
             println!("waiting for next connection!");
             let (stream, _) = listener.accept().expect("Read stream error!");
             println!("new connection!");
 
-            let base_asymalgo = SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P384; // SpdmBaseAsymAlgo::TPM_ALG_RSASSA_3072
-            let req_asym_algo = SpdmReqAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P384; // SpdmReqAsymAlgo::TPM_ALG_RSASSA_3072
+            #[cfg(not(feature = "is_sync"))]
+            {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(run_responder(test_dummy, stream)).unwrap();
+            }
+
+            #[cfg(feature = "is_sync")]
+            {
+                run_responder(test_dummy, stream).unwrap();
+            }
+        });
+
+        let t2 = std::thread::spawn(move || {
+            let stream =
+                TcpStream::connect("127.0.0.1:2323").expect("Couldn't connect to the server...");
 
             #[cfg(not(feature = "is_sync"))]
             {
                 let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(run_responder(stream, base_asymalgo, req_asym_algo))
+                rt.block_on(Box::pin(run_requester(test_dummy, stream)))
                     .unwrap();
             }
 
             #[cfg(feature = "is_sync")]
             {
-                run_responder(stream, base_asymalgo, req_asym_algo).unwrap();
+                run_requester(test_dummy, stream).unwrap();
             }
-        }
+        });
+
+        t1.join().unwrap();
+        t2.join().unwrap();
+        Ok(())
     }
 }
