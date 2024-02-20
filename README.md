@@ -48,8 +48,5 @@ rats-rs是一个纯Rust的CPU-TEE SPDM远程证明和安全传输实现，它建
 - [ ] 增加更完备的测试，包括对更多组件的单元测试与集成测试
 - [ ] 实现dice证书中的endorsements extension
 - [ ] 设计适用于CPU TEE的SPDM measurements映射
-- [ ] 设计SPDM Responder侧发起KEY_UPDATE、HEARTBEAT、END_SESSION请求的方案。
-    - 现实的通信链路一些是支持`bidirectional communication`的，即双方可以异步地向对方发送消息，例如UDP和TCP和websocket，HTTP则不属于这一类。而本项目支持的上层应用应该是常规的双向异步通信。SPDM规范里也提到了SPDM传输层支持双方异步地发送消息时的情况，但是没有定义实现方法，而且目前的spdm-rs的实现并不能很好地处理Responder主动向Requester发消息的情况。
-- [ ] 设计一种更符合SPDM证书要求的证书
-
+- [ ] 改善当前的证书设计，提供一种更符合SPDM证书要求的证书
 
