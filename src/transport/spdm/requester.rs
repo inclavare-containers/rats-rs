@@ -29,10 +29,11 @@ extern crate alloc;
 use crate::errors::*;
 use alloc::sync::Arc;
 
-struct SpdmRequester {
+pub struct SpdmRequester {
     context: requester::RequesterContext,
     session_id: Option<u32>,
 }
+
 impl SpdmRequester {
     pub fn new<S>(
         stream: S,

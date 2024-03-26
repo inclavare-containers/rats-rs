@@ -1,4 +1,4 @@
-use crate::{errors::*, verifier::sgx_dcap::SgxDcapVerifier};
+use crate::verifier::sgx_dcap::SgxDcapVerifier;
 use spdmlib::{
     crypto::cert_operation::CertValidationStrategy, error::SPDM_STATUS_INVALID_CERT,
     protocol::SpdmCertChainData,

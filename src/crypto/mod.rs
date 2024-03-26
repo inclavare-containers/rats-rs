@@ -1,11 +1,6 @@
-use std::fmt::format;
-
 use crate::errors::*;
 
-use pkcs8::{
-    der::DecodePem, DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding,
-    PrivateKeyInfo, SecretDocument,
-};
+use pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding};
 use rsa::traits::PublicKeyParts;
 use sha2::Digest as _;
 use zeroize::Zeroizing;

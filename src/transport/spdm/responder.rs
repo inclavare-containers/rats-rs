@@ -29,10 +29,11 @@ use crate::transport::spdm::transport::SimpleTransportEncap;
 use crate::transport::GenericSecureTransPort;
 use alloc::sync::Arc;
 
-struct SpdmResonder {
+pub struct SpdmResonder {
     context: responder::ResponderContext,
     session_id: Option<u32>,
 }
+
 impl SpdmResonder {
     pub fn new<S>(
         stream: S,
@@ -371,7 +372,7 @@ pub mod tests {
 
     #[test]
     fn test_spdm_over_tcp() -> Result<()> {
-        let test_dummy = true; /* set this to `false`` for testing with dice cert */
+        let test_dummy = true; /* set this to `false` for testing with dice cert */
 
         let t1 = std::thread::spawn(move || {
             let listener =

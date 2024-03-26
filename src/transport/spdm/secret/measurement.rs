@@ -16,7 +16,6 @@ use spdmlib::protocol::{
     SpdmMeasurementSpecification, SpdmMeasurementSummaryHashType,
 };
 use spdmlib::secret::measurement::MeasurementProvider;
-use spdmlib::secret::*;
 
 /* @imlk: GET_MEASUREMENTS/MEASUREMENTS相关，提供measurement值的callback，以及生成measurement summary的callback */
 pub struct DummyMeasurementProvider {}

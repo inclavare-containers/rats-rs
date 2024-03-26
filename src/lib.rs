@@ -1,12 +1,18 @@
 #![feature(specialization)]
+#![allow(incomplete_features)]
 
-mod attester;
+pub mod attester;
 mod cert;
 mod claims;
 mod crypto;
 mod errors;
 mod transport;
-mod verifier;
+pub mod verifier;
+
+pub use crate::cert::{verify_cert_der, CertBuilder};
+
+pub use crate::transport::spdm::requester::SpdmRequester;
+pub use crate::transport::spdm::responder::SpdmResonder;
 
 #[cfg(not(any(
     feature = "build-mode-host",
@@ -38,12 +44,8 @@ compile_error!("features `is_sync` and `async-tokio` are mutually exclusive");
 pub mod tests {
 
     use self::{
-        attester::{sgx_dcap::SgxDcapAttester, GenericAttester},
-        cert::dice::{
-            fields::{generate_claims_buffer, generate_evidence_buffer_with_tag},
-            gen_cert,
-        },
-        crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
+        attester::sgx_dcap::SgxDcapAttester,
+        crypto::{AsymmetricAlgo, HashAlgo},
     };
     use crate::{cert::CertBuilder, claims::Claims, errors::*};
 

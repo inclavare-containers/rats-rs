@@ -5,19 +5,17 @@ use self::extensions::{DiceEndorsementExtension, DiceEvidenceExtension};
 use crate::crypto::{AsymmetricPrivateKey, HashAlgo};
 use crate::errors::*;
 
-use pkcs8::LineEnding;
 use std::str::FromStr;
 use std::time::Duration;
 use x509_cert::builder::Builder;
 use x509_cert::builder::{CertificateBuilder, Profile};
-use x509_cert::der::EncodePem;
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 use x509_cert::time::Validity;
 use x509_cert::Certificate;
 
-pub fn gen_cert(
+pub fn generate_and_sign_dice_cert(
     subject: &str,
     hash_algo: HashAlgo,
     private_key: &AsymmetricPrivateKey,
@@ -113,14 +111,14 @@ pub fn gen_cert(
 #[cfg(test)]
 pub mod tests {
 
-    use crate::crypto::{AsymmetricAlgo, DefaultCrypto};
-
     use super::*;
+    use crate::crypto::{AsymmetricAlgo, DefaultCrypto};
+    use pkcs8::{der::EncodePem, LineEnding};
 
     #[test]
     fn test_gen_cert() -> Result<()> {
         let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
-        let pem = gen_cert(
+        let pem = generate_and_sign_dice_cert(
             "CN=rats-rs,O=Inclavare Containers",
             HashAlgo::Sha256,
             &key,

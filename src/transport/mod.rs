@@ -1,5 +1,5 @@
 #[cfg(feature = "transport-spdm")]
-mod spdm;
+pub mod spdm;
 
 use maybe_async::maybe_async;
 
