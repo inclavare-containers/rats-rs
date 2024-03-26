@@ -10,10 +10,10 @@ use alloc::sync::Arc;
 use core::ops::DerefMut;
 use std::io::{Read, Write};
 
-pub const FRAME_HEADER_LEN: usize = core::mem::size_of::<FrameHeader>();
+const FRAME_HEADER_LEN: usize = core::mem::size_of::<FrameHeader>();
 
 #[derive(Debug, Copy, Clone, Default)]
-pub struct FrameHeader {
+struct FrameHeader {
     pub payload_size: u32,
 }
 
@@ -30,6 +30,9 @@ impl Codec for FrameHeader {
     }
 }
 
+/// `FramedStream` is a generic framing module that segments a stream of `u8` data (`S`)
+/// into multiple packets. It maintains an internal state to manage reading from the stream
+/// and buffers data until complete packets are formed.
 pub struct FramedStream<S: Read + Write + Send> {
     stream: S,
     read_buffer: Vec<u8>,

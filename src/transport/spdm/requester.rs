@@ -5,8 +5,13 @@
 #![forbid(unsafe_code)]
 
 use super::io::FramedStream;
-use super::secret::cert::CertProvider;
-use super::secret::cert::ValidationContext;
+use super::secret::asym_crypto::RatsSecretAsymSigner;
+use super::secret::cert_provider::CertProvider;
+use super::secret::cert_provider::EmptyCertProvider;
+use super::secret::cert_provider::RatsCertProvider;
+use super::secret::cert_validation::EmptyValidationContext;
+use super::secret::cert_validation::RatsCertValidationStrategy;
+use super::secret::cert_validation::ValidationContext;
 use super::secret::measurement::DummyMeasurementProvider;
 use super::transport::SimpleTransportEncap;
 use crate::transport::GenericSecureTransPort;
@@ -245,10 +250,9 @@ pub mod tests {
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
         transport::spdm::secret::{
             asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
-            cert::{
-                tests::{DummyCertProvider, DummyValidationContext},
-                EmptyCertProvider, EmptyValidationContext, RatsCertProvider,
-                RatsCertValidationStrategy,
+            cert_provider::{tests::DummyCertProvider, EmptyCertProvider, RatsCertProvider},
+            cert_validation::{
+                tests::DummyValidationContext, EmptyValidationContext, RatsCertValidationStrategy,
             },
         },
     };

@@ -1,3 +1,6 @@
+//! A Transport Message is a packet consisting of a header and body. Its design shares similarities with MCTP.
+//! For reference of MCTP, see: https://www.dmtf.org/sites/default/files/standards/documents/DSP0245_1.2.0.pdf
+
 use codec::enum_builder;
 use codec::{Codec, Reader, Writer};
 use spdmlib::common::SpdmTransportEncap;
@@ -12,14 +15,19 @@ use core::ops::DerefMut;
 use spin::Mutex;
 
 enum_builder! {
+    /// Enumeration of message types for the Transport Message.
     @U8
     EnumName: SimpleTransportMessageType;
     EnumVal{
+        /// Message type for SPDM messages.
         Spdm => 0x00,
+        /// Message type for Secured messages. The plaintext is either an SDPM message or an APP message.
         Secured => 0x01,
+        /// Message type for APP messages.
         App => 0x02
     }
 }
+
 impl Default for SimpleTransportMessageType {
     fn default() -> SimpleTransportMessageType {
         SimpleTransportMessageType::Spdm
@@ -75,7 +83,9 @@ impl SpdmTransportEncap for SimpleTransportEncap {
         Ok(header_size + payload_len)
     }
 
-    // @imlk: 当不是MctpMessageTypeSpdm也不是MctpMessageTypeSecuredMctp，或者spdm缓冲区装不下时，返回Err
+    /// Decapsulates a packet as a Transport Message.
+    ///
+    /// Returns `Err` if it's neither Spdm message nor Secured message, or if the SPDM buffer cannot accommodate.
     async fn decap(
         &mut self,
         transport_buffer: Arc<&[u8]>,
@@ -93,7 +103,10 @@ impl SpdmTransportEncap for SimpleTransportEncap {
                     secured_message = true;
                 }
                 v => {
-                    println!("decap err: got type: {:x?}", v);
+                    println!(
+                        "decap err: Spdm message and Secured message expected, but got message type: {:x?}",
+                        v
+                    );
                     return Err(SPDM_STATUS_DECAP_FAIL);
                 }
             },
@@ -123,7 +136,7 @@ impl SpdmTransportEncap for SimpleTransportEncap {
         let mut writer = Writer::init(app_buffer);
         let mctp_header = if is_app_message {
             SimpleTransportMessageHeader {
-                r#type: SimpleTransportMessageType::App, /* @imlk: PLDM 是MCTP里type=1的消息，See: https://www.dmtf.org/sites/default/files/standards/documents/DSP0245_1.2.0.pdf */
+                r#type: SimpleTransportMessageType::App,
             }
         } else {
             SimpleTransportMessageHeader {
@@ -141,6 +154,9 @@ impl SpdmTransportEncap for SimpleTransportEncap {
         Ok(header_size + payload_len)
     }
 
+    /// Decapsulates a packet as a Transport Message.
+    ///
+    /// Returns `Err` if it's neither Secured message nor App message, or if the SPDM buffer cannot accommodate.
     async fn decap_app(
         &mut self,
         app_buffer: Arc<&[u8]>,
@@ -155,7 +171,7 @@ impl SpdmTransportEncap for SimpleTransportEncap {
                     is_app_mesaage = true;
                 }
                 v => {
-                    println!("decap_app err: got type: {:x?}", v);
+                    println!("decap_app err: Spdm message and App message expected, but got message type: {:x?}", v);
                     return Err(SPDM_STATUS_DECAP_APP_FAIL);
                 }
             },

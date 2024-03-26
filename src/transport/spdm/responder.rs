@@ -2,7 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0 or MIT
 
-use super::secret::cert::{CertProvider, ValidationContext};
+use super::secret::asym_crypto::RatsSecretAsymSigner;
+use super::secret::cert_provider::{CertProvider, EmptyCertProvider, RatsCertProvider};
+use super::secret::cert_validation::{
+    EmptyValidationContext, RatsCertValidationStrategy, ValidationContext,
+};
 use super::secret::measurement::DummyMeasurementProvider;
 use codec::Codec;
 use common::SpdmTransportEncap;
@@ -296,9 +300,9 @@ pub mod tests {
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
         transport::spdm::secret::{
             asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
-            cert::{
-                tests::{DummyCertProvider, DummyValidationContext},
-                EmptyValidationContext, RatsCertProvider, RatsCertValidationStrategy,
+            cert_provider::{tests::DummyCertProvider, RatsCertProvider},
+            cert_validation::{
+                tests::DummyValidationContext, EmptyValidationContext, RatsCertValidationStrategy,
             },
         },
     };
