@@ -6,4 +6,3 @@ pub mod requester;
 pub mod responder;
 mod secret;
 mod transport;
-mod watchdog_impl_sample;

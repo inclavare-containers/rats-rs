@@ -4,7 +4,6 @@
 
 use super::secret::cert::{CertProvider, ValidationContext};
 use super::secret::measurement::DummyMeasurementProvider;
-use super::watchdog_impl_sample::init_watchdog;
 use codec::Codec;
 use common::SpdmTransportEncap;
 use core::convert::TryFrom;
@@ -52,9 +51,7 @@ impl SpdmResonder {
             | SpdmResponseCapabilityFlags::ENCRYPT_CAP
             | SpdmResponseCapabilityFlags::MAC_CAP
             | SpdmResponseCapabilityFlags::KEY_EX_CAP
-            | SpdmResponseCapabilityFlags::ENCAP_CAP
-            | SpdmResponseCapabilityFlags::HBEAT_CAP
-            | SpdmResponseCapabilityFlags::KEY_UPD_CAP;
+            | SpdmResponseCapabilityFlags::ENCAP_CAP;
         let rsp_capabilities = if cfg!(feature = "mut-auth") {
             rsp_capabilities | SpdmResponseCapabilityFlags::MUT_AUTH_CAP
         } else {
@@ -91,8 +88,6 @@ impl SpdmResonder {
         let mut provision_info = common::SpdmProvisionInfo::default();
         provision_info.my_cert_chain_data[0] = cert_provider.get_full_cert_chain();
         provision_info.peer_root_cert_data[0] = validation_context.get_peer_root_cert();
-
-        init_watchdog();
 
         let device_io = Arc::new(Mutex::new(FramedStream::new(stream)));
         let transport_encap: Arc<Mutex<(dyn SpdmTransportEncap + Send + Sync)>> =

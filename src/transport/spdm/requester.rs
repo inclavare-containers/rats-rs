@@ -50,9 +50,7 @@ impl SpdmRequester {
             | SpdmRequestCapabilityFlags::ENCRYPT_CAP
             | SpdmRequestCapabilityFlags::MAC_CAP
             | SpdmRequestCapabilityFlags::KEY_EX_CAP
-            | SpdmRequestCapabilityFlags::ENCAP_CAP
-            | SpdmRequestCapabilityFlags::HBEAT_CAP
-            | SpdmRequestCapabilityFlags::KEY_UPD_CAP;
+            | SpdmRequestCapabilityFlags::ENCAP_CAP;
         let req_capabilities = if cfg!(feature = "mut-auth") {
             req_capabilities | SpdmRequestCapabilityFlags::MUT_AUTH_CAP
         } else {
