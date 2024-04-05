@@ -2,8 +2,8 @@
 pub mod spdm;
 
 use maybe_async::maybe_async;
-
 use crate::errors::*;
+
 
 #[maybe_async]
 pub trait GenericSecureTransPort {

@@ -6,13 +6,10 @@ mod cert;
 mod claims;
 mod crypto;
 mod errors;
-mod transport;
+pub mod transport;
 pub mod verifier;
 
 pub use crate::cert::{verify_cert_der, CertBuilder};
-
-pub use crate::transport::spdm::requester::SpdmRequester;
-pub use crate::transport::spdm::responder::SpdmResonder;
 
 #[cfg(not(any(
     feature = "build-mode-host",

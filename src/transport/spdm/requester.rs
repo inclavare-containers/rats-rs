@@ -14,7 +14,13 @@ use super::secret::cert_validation::RatsCertValidationStrategy;
 use super::secret::cert_validation::ValidationContext;
 use super::secret::measurement::DummyMeasurementProvider;
 use super::transport::SimpleTransportEncap;
+use super::VerifyMode;
+use crate::attester::sgx_dcap::SgxDcapAttester;
+use crate::crypto::AsymmetricAlgo;
+use crate::crypto::DefaultCrypto;
+use crate::crypto::HashAlgo;
 use crate::transport::GenericSecureTransPort;
+use crate::CertBuilder;
 use common::SpdmTransportEncap;
 use core::convert::TryFrom;
 use maybe_async::maybe_async;
@@ -23,9 +29,11 @@ use spdmlib::common::SecuredMessageVersion;
 use spdmlib::common::SpdmOpaqueSupport;
 use spdmlib::config;
 use spdmlib::crypto::cert_operation::CertValidationStrategy;
+use spdmlib::crypto::cert_operation::DefaultCertValidationStrategy;
 use spdmlib::message::*;
 use spdmlib::protocol::*;
 use spdmlib::requester;
+use spdmlib::secret::asym_sign::DefaultSecretAsymSigner;
 use spdmlib::secret::asym_sign::SecretAsymSigner;
 use spin::Mutex;
 use std::io::Read;
@@ -33,6 +41,79 @@ use std::io::Write;
 extern crate alloc;
 use crate::errors::*;
 use alloc::sync::Arc;
+
+pub struct SpdmRequesterBuilder {
+    verify_mode: VerifyMode,
+    attest_self: bool,
+}
+
+impl SpdmRequesterBuilder {
+    /// Creates a new `SpdmRequesterBuilder` instance with default settings.
+    pub fn new() -> Self {
+        Self {
+            verify_mode: VerifyMode::VERIFY_PEER,
+            attest_self: false,
+        }
+    }
+
+    /// Sets the verification mode. If not specified, defaults to `VerifyMode:VERIFY_PEER`
+    pub fn with_verify_mode(mut self, verify_mode: VerifyMode) -> Self {
+        self.verify_mode = verify_mode;
+        self
+    }
+
+    /// Sets whether to attest self to the peer. If not specified, defaults to `false`.
+    pub fn with_attest_self(mut self, attest_self: bool) -> Self {
+        self.attest_self = attest_self;
+        self
+    }
+
+    pub fn build_with_stream<S>(&self, stream: S) -> Result<SpdmRequester>
+    where
+        S: Read + Write + Send + Sync + 'static,
+    {
+        let (cert_provider, asym_signer) = if cfg!(feature = "mut-auth") && self.attest_self {
+            let attester = SgxDcapAttester::new();
+            let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
+            let cert =
+                CertBuilder::new(attester, HashAlgo::Sha256).build_der_with_private_key(&key)?;
+            (
+                Box::new(RatsCertProvider::new(cert)) as Box<dyn CertProvider>,
+                Box::new(RatsSecretAsymSigner::new(key)) as Box<dyn SecretAsymSigner + Send + Sync>,
+            )
+        } else {
+            (
+                Box::new(EmptyCertProvider {}) as Box<dyn CertProvider>,
+                Box::new(DefaultSecretAsymSigner {})
+                    as Box<dyn SecretAsymSigner + Send + Sync + 'static>,
+            )
+        };
+
+        // TODO: merge validation_context into cert_validation_strategy and delete SpdmProvisionInfo::peer_root_cert_data of spdm-rs.
+        let (validation_context, cert_validation_strategy) =
+            if self.verify_mode.contains(VerifyMode::VERIFY_PEER) {
+                (
+                    Box::new(EmptyValidationContext {}) as Box<dyn ValidationContext>,
+                    Box::new(RatsCertValidationStrategy {})
+                        as Box<dyn CertValidationStrategy + Send + Sync>,
+                )
+            } else {
+                (
+                    Box::new(EmptyValidationContext {}) as Box<dyn ValidationContext>, // TODO: use a default rats-rs CA cert or change code of spdm-rs.
+                    Box::new(DefaultCertValidationStrategy {})
+                        as Box<dyn CertValidationStrategy + Send + Sync>,
+                )
+            };
+
+        Ok(SpdmRequester::new(
+            stream,
+            cert_provider,
+            validation_context,
+            asym_signer,
+            cert_validation_strategy,
+        ))
+    }
+}
 
 pub struct SpdmRequester {
     context: requester::RequesterContext,

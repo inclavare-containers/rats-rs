@@ -6,12 +6,13 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.81"
 async-trait = "0.1.77"
+bitflags = "2.5.0"
 bytes = "1.5.0"
 ciborium = "0.2.2"
 codec = {git = "https://github.com/ccc-spdm-tools/spdm-rs", branch = "main", optional = true, features = ["alloc"]}
 const-oid = {version = "0.9.6", optional = true}
-env_logger = "0.11.2"
 hex = "0.4.3"
 log = "0.4.20"
 maybe-async = "0.2.7"
@@ -33,6 +34,7 @@ thiserror = "1.0.56"
 tokio = {version = "1.36.0", features = ["full"], optional = true}
 x509-cert = {version = "0.2.5", features = ["builder"], optional = true}
 zeroize = "1.7.0"
+bstr = "1.9.1"
 
 [patch."https://github.com/ccc-spdm-tools/spdm-rs"]
 codec = {path = '../spdm-rs/codec'}
