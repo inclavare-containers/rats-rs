@@ -33,12 +33,46 @@ rats-rs是一个纯Rust的CPU-TEE SPDM远程证明和安全传输实现，它建
 
 ## 测试
 
+### 单元测试
+
 出于时间原因，本项目目前只对部分组件提供了单元测试。
 
-对SPDM通信的测试可以在`src/transport/spdm/responder.rs`的`test_spdm_over_tcp()`里找到。其中，`test_dummy=true`模式下通信双方使用的是spdm-rs项目中提供的虚假的x509证书；`test_dummy=false`模式下模拟的是基于远程证明的单边验证，SPDM通信双方使用的是dice证书。
+### 集成测试
 
-> [!Note]
-> `test_dummy=false`模式暂时还未在occlum SGX环境中得到测试。
+TODO: CI/CD
+
+## example
+
+### spdm
+
+本项目提供了一个样例程序`examples/spdm.rs`，演示了如何创建一个运行于TCP流之上的SPDM安全通信外壳，并在其中进行数据传输。
+
+该程序支持在非TEE的host环境，和基于SGX的Occlum环境运行。以下提供一个简单的运行方法，详细的参数可以通过在执行时指定`--help`选项了解。
+
+1. 在Occlum中运行server端
+
+    ```sh
+    just run-in-occlum server --attest-self --listen-on-tcp 127.0.0.1:8080
+    ```
+> [!IMPORTANT]  
+> `--attest-self`选项指定服务端需要作为attester向对端证明自己的身份，指定该选项时必须在某种TEE环境中运行。
+
+2. 运行client端
+
+    在该例子中，client端不需要向peer证明自己身份，因此，既可以运行在非TEE环境也可以运行在TEE环境。
+
+    例如，运行在非TEE环境：
+    ```sh
+    just run-in-host client --verify-peer --connect-to-tcp 127.0.0.1:8080
+    ```
+
+    或者，运行在非TEE环境：
+    ```sh
+    just run-in-occlum client --verify-peer --connect-to-tcp 127.0.0.1:8080
+    ```
+
+> [!NOTE]
+> 可使用环境变量`RATS_RS_LOG_LEVEL`来控制该程序启用的日志级别，环境变量的取值为`error`, `warn`, `info`, `debug`和`trace`，默认值为`trace`
 
 
 ## 下一目标

@@ -1,0 +1,27 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug examples/spdm server",
+            "program": "target/debug/examples/spdm",
+            "args": ["server", "--attest-self", "--listen-on-tcp", "127.0.0.1:8080"],
+            "cwd": "${workspaceRoot}",
+            "sourceLanguages": [
+                "rust"
+            ]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug examples/spdm client",
+            "program": "target/debug/examples/spdm",
+            "args": ["client", "--verify-peer", "--connect-to-tcp", "127.0.0.1:8080"],
+            "cwd": "${workspaceRoot}",
+            "sourceLanguages": [
+                "rust"
+            ]
+        }
+    ]
+}

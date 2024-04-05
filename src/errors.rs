@@ -105,6 +105,7 @@ impl Error {
     }
 }
 
+// TODO: replace this with `impl<E: std::error::Error> From<E> for Error`，so that we can record source of our Error
 impl<E: Display> From<E> for Error {
     default fn from(error: E) -> Error {
         Error::kind_with_msg(ErrorKind::Unknown, error)
@@ -173,5 +174,20 @@ impl<T> WithContext<T> for std::result::Result<T, Error> {
                 error.with_msg(context)
             }
         })
+    }
+}
+
+// TODO: impl std::error::Error trait for our Error, so that we can provide `source` info.
+/// This is a temporary workaround that makes it possible to convert our Error to an anyhow::Error. A better way is to impl std::error::Error trait for our Error.
+impl From<Error> for anyhow::Error {
+    fn from(value: Error) -> Self {
+        anyhow::anyhow!(
+            "rats-rs error kind {:?}: {}",
+            value.kind,
+            match &value.msg {
+                Some(s) => s,
+                None => "unknown reason",
+            }
+        )
     }
 }

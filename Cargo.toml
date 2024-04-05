@@ -57,3 +57,11 @@ default = ["build-mode-occlum", "crypto-rustcrypto", "transport-spdm", "verifier
 is_sync = ["maybe-async/is_sync", "spdmlib/is_sync"]
 transport-spdm = ["dep:spdmlib", "dep:codec", "dep:ring"]
 verifier-sgx-ecdsa = ["dep:sgx-dcap-quoteverify-rs", "dep:sgx-dcap-quoteverify-sys"]
+
+[dev-dependencies]
+clap = {version = "4.5.4", features = ["derive"]}
+env_logger = {version = "0.11.2", features = ["auto-color", "humantime", "regex"]}
+
+[[example]]
+name = "spdm"
+required-features = ["is_sync"]
