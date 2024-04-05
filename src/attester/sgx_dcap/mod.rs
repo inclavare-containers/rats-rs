@@ -1,8 +1,5 @@
 use super::{GenericAttester, GenericEvidence};
-use crate::{
-    cert::dice::fields::OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE,
-    errors::{Error, ErrorKind},
-};
+use crate::{cert::dice::fields::OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE, errors::*};
 
 use occlum_dcap::{sgx_report_data_t, DcapQuote};
 
@@ -35,10 +32,13 @@ impl GenericAttester for SgxDcapAttester {
             let mut sgx_report_data = sgx_report_data_t::default();
             sgx_report_data.d[..report_data.len()].clone_from_slice(report_data);
 
-            handler.generate_quote(
-                occlum_quote.as_mut_ptr(),
-                &sgx_report_data as *const sgx_report_data_t,
-            )?;
+            handler
+                .generate_quote(
+                    occlum_quote.as_mut_ptr(),
+                    &sgx_report_data as *const sgx_report_data_t,
+                )
+                .kind(ErrorKind::AttesterSgxEcdsaGenerateQuoteFailed)
+                .context("failed at generate_quote()")?;
 
             Ok(SgxDcapEvidence { data: occlum_quote })
         } else {

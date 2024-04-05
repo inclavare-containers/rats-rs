@@ -4,6 +4,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ErrorKind {
+    AttesterSgxEcdsaGenerateQuoteFailed,
+
     VerifierSgxEcdsaVerifyQuoteFailed,
 
     VerifierSgxEcdsaGetSupplementalDataFailed,

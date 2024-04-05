@@ -1,4 +1,5 @@
 use crate::verifier::sgx_dcap::SgxDcapVerifier;
+use log::{error, info};
 use spdmlib::{
     crypto::cert_operation::CertValidationStrategy, error::SPDM_STATUS_INVALID_CERT,
     protocol::SpdmCertChainData,
@@ -24,14 +25,14 @@ impl CertValidationStrategy for RatsCertValidationStrategy {
         match crate::cert::verify_cert_der(cert_chain, &SgxDcapVerifier::new()) {
             Ok(claims) => {
                 // TODO: check BUILT_IN_CLAIM_SGX_MR_ENCLAVE etc.
-                log::info!(
+                info!(
                     "{}:\t{}",
                     crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE,
                     hex::encode(
                         &claims[crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE]
                     ),
                 );
-                log::info!(
+                info!(
                     "{}:\t{}",
                     crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER,
                     hex::encode(
@@ -41,7 +42,7 @@ impl CertValidationStrategy for RatsCertValidationStrategy {
                 Ok(())
             }
             Err(e) => {
-                log::error!(
+                error!(
                     "RatsCertValidationStrategy::verify_cert_chain() failed: {:?}",
                     e
                 );

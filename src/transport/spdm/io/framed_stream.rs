@@ -1,6 +1,7 @@
 extern crate alloc;
 
 use codec::{Codec, Reader, Writer};
+use log::{error, info, warn};
 use spdmlib::common::SpdmDeviceIo;
 use spdmlib::config;
 use spdmlib::error::{SpdmResult, SPDM_STATUS_SEND_FAIL};
@@ -79,6 +80,7 @@ where
 
             if buffer_size >= self.read_buffer.len() {
                 /* not enough but the buffer is full */
+                warn!("broken packet: buffer is too small and should be at least {expected_size} bytes");
                 break false;
             }
 
@@ -86,19 +88,23 @@ where
             // TODO: support real async
             let s = match self.stream.read(&mut self.read_buffer[buffer_size..]) {
                 Ok(s) => s,
-                Err(_) => break false, /* stream read error! */
+                Err(e) => {
+                    error!("broken packet: {e}");
+                    break false;
+                } /* stream read error! */
             };
             buffer_size += s;
 
             if s == 0 {
                 /* the stream is closed, and we have not got more bytes at this try, so let's give up. */
+                error!("broken packet: unexpected EOF");
                 break false;
             }
         };
 
         let read_size = std::cmp::min(buffer_size, expected_size);
-        println!(
-            "read:\t{:02X?}{:02X?}",
+        info!(
+            "read framed:\t{:02x?}{:02x?}",
             &self.read_buffer[..std::cmp::min(read_size, FRAME_HEADER_LEN)],
             &self.read_buffer[std::cmp::min(read_size, FRAME_HEADER_LEN)..read_size]
         );
@@ -140,7 +146,7 @@ where
             .map_err(|_| SPDM_STATUS_SEND_FAIL)?;
         self.stream.flush().map_err(|_| SPDM_STATUS_SEND_FAIL)?;
 
-        println!("write:\t{:02X?}{:02X?}", &buffer[..used], payload);
+        info!("write framed:\t{:02x?}{:02x?}", &buffer[..used], payload);
         Ok(())
     }
 
