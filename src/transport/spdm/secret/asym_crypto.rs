@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0 or MIT
 
+use log::{error, trace};
 use rsa::signature::{RandomizedSigner, SignatureEncoding};
 use spdmlib::secret::asym_sign::SecretAsymSigner;
 
@@ -22,7 +23,7 @@ impl RatsSecretAsymSigner {
 impl SecretAsymSigner for RatsSecretAsymSigner {
     fn supported_algo(&self) -> (SpdmBaseHashAlgo, SpdmBaseAsymAlgo) {
         (
-            SpdmBaseHashAlgo::all(),
+            SpdmBaseHashAlgo::TPM_ALG_SHA_256, // TODO: enable support for sha384 and sha512
             match &self.private_key {
                 AsymmetricPrivateKey::Rsa2048(_) => {
                     SpdmBaseAsymAlgo::TPM_ALG_RSASSA_2048 | SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_2048
@@ -44,6 +45,8 @@ impl SecretAsymSigner for RatsSecretAsymSigner {
         base_asym_algo: SpdmBaseAsymAlgo,
         data: &[u8],
     ) -> Option<SpdmSignatureStruct> {
+        trace!("sign data with {base_hash_algo:?} and {base_asym_algo:?}");
+
         let digest = match (&self.private_key, base_asym_algo) {
             (AsymmetricPrivateKey::Rsa2048(key), SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_2048)
             | (AsymmetricPrivateKey::Rsa3072(key), SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_3072)
@@ -90,6 +93,15 @@ impl SecretAsymSigner for RatsSecretAsymSigner {
                 }
             }
             (AsymmetricPrivateKey::P256(key), SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P256) => {
+                if base_hash_algo != SpdmBaseHashAlgo::TPM_ALG_SHA_256 {
+                    error!(
+                        "unsupported operation, {:?} only works with {:?}, but got {:?}",
+                        SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P256,
+                        SpdmBaseHashAlgo::TPM_ALG_SHA_256,
+                        base_hash_algo
+                    );
+                    return None;
+                }
                 let sign_key = p256::ecdsa::SigningKey::from(key);
                 let k: p256::ecdsa::Signature =
                     sign_key.sign_with_rng(&mut rand::rngs::OsRng, data);
