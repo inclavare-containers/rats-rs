@@ -3,14 +3,11 @@ use super::dice::fields::{
 };
 use super::dice::generate_and_sign_dice_cert;
 use super::CLAIM_NAME_PUBLIC_KEY_HASH;
-use crate::attester::GenericEvidence;
-use crate::crypto::AsymmetricPrivateKey;
+use crate::crypto::{AsymmetricAlgo, AsymmetricPrivateKey, DefaultCrypto, HashAlgo};
 use crate::errors::*;
-use crate::{
-    attester::GenericAttester,
-    claims::Claims,
-    crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
-};
+use crate::tee::claims::Claims;
+use crate::tee::GenericAttester;
+use crate::tee::GenericEvidence;
 
 use pkcs8::der::{Encode, EncodePem};
 use pkcs8::LineEnding;
@@ -97,7 +94,7 @@ impl<A: GenericAttester> CertBuilder<A> {
         /* Generate evidence buffer */
         let evidence = self.attester.get_evidence(&claims_buffer_hash)?;
         let evidence_buffer = generate_evidence_buffer_with_tag(
-            A::Evidence::DICE_OCBR_TAG,
+            evidence.get_dice_cbor_tag(),
             evidence.get_raw_evidence_dice(),
             &claims_buffer,
         )?;

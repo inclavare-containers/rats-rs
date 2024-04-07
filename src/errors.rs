@@ -2,21 +2,27 @@ use std::fmt::Display;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ErrorKind {
-    AttesterSgxEcdsaGenerateQuoteFailed,
+    UnsupportedTeeType,
 
-    VerifierSgxEcdsaVerifyQuoteFailed,
+    UnrecognizedEvidenceType,
 
-    VerifierSgxEcdsaGetSupplementalDataFailed,
+    SgxDcapUnsupportedEvidenceType,
 
-    VerifierSgxEcdsaMulformedQuote,
+    SgxDcapAttesterGenerateQuoteFailed,
 
-    VerifierSgxEcdsaReportDataMismatch,
+    SgxDcapVerifierVerifyQuoteFailed,
+
+    SgxDcapVerifierGetSupplementalDataFailed,
+
+    SgxDcapMulformedQuote,
+
+    SgxDcapVerifierReportDataMismatch,
 
     InvalidParameter,
 
-    Unsupported,
+    UnsupportedHashAlgo,
 
     GenCertError,
 

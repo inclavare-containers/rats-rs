@@ -1,4 +1,3 @@
-use crate::verifier::sgx_dcap::SgxDcapVerifier;
 use log::{error, info};
 use spdmlib::{
     crypto::cert_operation::CertValidationStrategy, error::SPDM_STATUS_INVALID_CERT,
@@ -22,21 +21,23 @@ pub struct RatsCertValidationStrategy {}
 impl CertValidationStrategy for RatsCertValidationStrategy {
     fn verify_cert_chain(&self, cert_chain: &[u8]) -> spdmlib::error::SpdmResult {
         // TODO: check evidence type and choose Verifier
-        match crate::cert::verify_cert_der(cert_chain, &SgxDcapVerifier::new()) {
+        match crate::cert::verify_cert_der(cert_chain) {
             Ok(claims) => {
                 // TODO: check BUILT_IN_CLAIM_SGX_MR_ENCLAVE etc.
                 info!(
                     "{}:\t{}",
-                    crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE,
+                    crate::tee::sgx_dcap::verifier::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE,
                     hex::encode(
-                        &claims[crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE]
+                        &claims
+                            [crate::tee::sgx_dcap::verifier::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE]
                     ),
                 );
                 info!(
                     "{}:\t{}",
-                    crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER,
+                    crate::tee::sgx_dcap::verifier::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER,
                     hex::encode(
-                        &claims[crate::verifier::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER]
+                        &claims
+                            [crate::tee::sgx_dcap::verifier::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER]
                     ),
                 );
                 Ok(())

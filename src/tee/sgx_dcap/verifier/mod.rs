@@ -5,8 +5,10 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use super::GenericVerifier;
-use crate::{attester::sgx_dcap::SgxDcapEvidence, claims::Claims, errors::*};
+use crate::errors::*;
+use crate::tee::claims::Claims;
+use crate::tee::sgx_dcap::evidence::SgxDcapEvidence;
+use crate::tee::GenericVerifier;
 
 use log::{debug, warn};
 use sgx_dcap_quoteverify_rs::{
@@ -35,7 +37,7 @@ impl GenericVerifier for SgxDcapVerifier {
         /* Parsing quote to get user-data and some fields */
         if evidence.data.len() < std::mem::size_of::<sgx_quote3_t>() {
             Err(Error::kind_with_msg(
-                ErrorKind::VerifierSgxEcdsaMulformedQuote,
+                ErrorKind::SgxDcapMulformedQuote,
                 format!(
                     "evidence too short, evidence.data.len(): {}",
                     evidence.data.len()
@@ -48,7 +50,7 @@ impl GenericVerifier for SgxDcapVerifier {
             std::mem::size_of::<sgx_quote3_t>() + quote.signature_data_len as usize;
         if evidence.data.len() < expected_quote_len {
             Err(Error::kind_with_msg(
-                ErrorKind::VerifierSgxEcdsaMulformedQuote,
+                ErrorKind::SgxDcapMulformedQuote,
                 format!(
                     "evidence too short and probably got truncated, evidence.data.len(): {}, expected: {}",
                     evidence.data.len(), expected_quote_len
@@ -61,7 +63,7 @@ impl GenericVerifier for SgxDcapVerifier {
         extended.d[..report_data.len()].clone_from_slice(report_data);
         if quote.report_body.report_data.d != extended.d {
             Err(Error::kind_with_msg(
-                ErrorKind::VerifierSgxEcdsaReportDataMismatch,
+                ErrorKind::SgxDcapVerifierReportDataMismatch,
                 "report data mismatch",
             ))?;
         }
@@ -96,7 +98,7 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
             }
         }
         Err(e) => Err(Error::kind_with_msg(
-            ErrorKind::VerifierSgxEcdsaGetSupplementalDataFailed,
+            ErrorKind::SgxDcapVerifierGetSupplementalDataFailed,
             format!(
                 "tee_get_quote_supplemental_data_size failed: {:#04x}",
                 e as u32
@@ -135,7 +137,7 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
         tee_verify_quote(quote, p_collateral, current_time, None, p_supplemental_data).map_err(
             |e| {
                 Error::kind_with_msg(
-                    ErrorKind::VerifierSgxEcdsaVerifyQuoteFailed,
+                    ErrorKind::SgxDcapVerifierVerifyQuoteFailed,
                     format!("tee_verify_quote failed: {:#04x}", e as u32),
                 )
             },
@@ -166,7 +168,7 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
         }
         _ => {
             Err(Error::kind_with_msg(
-                ErrorKind::VerifierSgxEcdsaVerifyQuoteFailed,
+                ErrorKind::SgxDcapVerifierVerifyQuoteFailed,
                 format!(
                     "Verification completed with Terminal result: {:x}",
                     quote_verification_result as u32

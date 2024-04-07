@@ -129,7 +129,7 @@ pub mod tests {
         .kind(ErrorKind::GenCertError)
         .context("failed to encode certificate as pem")?;
 
-        let pem = println!("generated pem:\n{}", pem);
+        println!("generated pem:\n{}", pem);
         // you can also view the cert manually with https://certificatedecoder.dev/
 
         Ok(())

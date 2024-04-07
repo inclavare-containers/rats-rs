@@ -48,15 +48,15 @@ webpki = {path = "../spdm-rs/external/webpki"}
 
 [features]
 async-tokio = ["dep:tokio"]
-build-mode-host = []
-build-mode-occlum = ["dep:occlum_dcap"]
-build-mode-sgx = []
 crypto-rustcrypto = ["dep:x509-cert", "dep:sha2", "dep:p256", "dep:rsa", "dep:pkcs8", "dep:const-oid", "dep:signature"]
-default = ["build-mode-occlum", "crypto-rustcrypto", "transport-spdm", "verifier-sgx-ecdsa", "is_sync"]
-# default = ["build-mode-occlum", "crypto-rustcrypto", "transport-spdm", "verifier-sgx-ecdsa", "async-tokio"]
+default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "verifier-sgx-dcap", "is_sync"]
+# default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "verifier-sgx-dcap", "async-tokio"]
 is_sync = ["maybe-async/is_sync", "spdmlib/is_sync"]
 transport-spdm = ["dep:spdmlib", "dep:codec", "dep:ring"]
-verifier-sgx-ecdsa = ["dep:sgx-dcap-quoteverify-rs", "dep:sgx-dcap-quoteverify-sys"]
+attester-sgx-dcap = []
+attester-sgx-dcap-occlum = ["attester-sgx-dcap", "dep:occlum_dcap"]
+attester-sgx-dcap-enclave = [] # TODO: plain enclave mode
+verifier-sgx-dcap = ["dep:sgx-dcap-quoteverify-rs", "dep:sgx-dcap-quoteverify-sys"]
 
 [dev-dependencies]
 clap = {version = "4.5.4", features = ["derive"]}

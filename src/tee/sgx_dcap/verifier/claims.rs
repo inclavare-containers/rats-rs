@@ -1,5 +1,5 @@
-use crate::claims::Claims;
 use crate::errors::*;
+use crate::tee::claims::Claims;
 use sgx_dcap_quoteverify_sys::sgx_quote3_t;
 
 /* SGX built-in claims */
@@ -25,22 +25,24 @@ pub const BUILT_IN_CLAIM_SGX_CONFIG_SVN: &'static str = "sgx_config_svn";
 /* ISV assigned Family ID */
 pub const BUILT_IN_CLAIM_SGX_ISV_FAMILY_ID: &'static str = "sgx_isv_family_id";
 
-
 // TODO: test this with mulformed quote
 pub fn gen_claims_from_quote(quote: &sgx_quote3_t) -> Result<Claims> {
     let mut claims = Claims::default();
 
     /* common claims */
-    claims.insert(crate::claims::BUILT_IN_CLAIM_COMMON_QUOTE.into(), unsafe {
-        core::slice::from_raw_parts(
-            quote as *const sgx_quote3_t as *const u8,
-            core::mem::size_of::<sgx_quote3_t>() + quote.signature_data_len as usize,
-        )
-        .into()
-    });
     claims.insert(
-        crate::claims::BUILT_IN_CLAIM_COMMON_QUOTE_TYPE.into(),
-        "sgx_ecdsa".as_bytes().into(),
+        crate::tee::claims::BUILT_IN_CLAIM_COMMON_QUOTE.into(),
+        unsafe {
+            core::slice::from_raw_parts(
+                quote as *const sgx_quote3_t as *const u8,
+                core::mem::size_of::<sgx_quote3_t>() + quote.signature_data_len as usize,
+            )
+            .into()
+        },
+    );
+    claims.insert(
+        crate::tee::claims::BUILT_IN_CLAIM_COMMON_QUOTE_TYPE.into(),
+        "sgx_dcap".as_bytes().into(),
     );
 
     /* sgx claims */

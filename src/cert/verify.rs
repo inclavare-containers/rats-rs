@@ -3,25 +3,20 @@ use super::dice::fields::{
     parse_claims_buffer, parse_evidence_buffer_with_tag, parse_pubkey_hash_value_buffer,
 };
 use super::CLAIM_NAME_PUBLIC_KEY_HASH;
-use crate::attester::GenericEvidence;
-
-use crate::claims::Claims;
 use crate::crypto::DefaultCrypto;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
-use crate::verifier::GenericVerifier;
+use crate::tee::{claims::Claims, AutoVerifier, GenericEvidence, GenericVerifier};
 
 use const_oid::ObjectIdentifier;
+use log::debug;
 use pkcs8::der::referenced::OwnedToRef;
 use pkcs8::der::{Decode, Encode};
 use pkcs8::spki::AlgorithmIdentifierOwned;
 use signature::Verifier;
 use x509_cert::Certificate;
 
-pub fn verify_cert_der<Verifier: GenericVerifier>(
-    cert: &[u8],
-    verifier: &Verifier,
-) -> Result<Claims> {
+pub fn verify_cert_der(cert: &[u8]) -> Result<Claims> {
     let cert = Certificate::from_der(cert)
         .kind(ErrorKind::ParseCertError)
         .context("failed to parse certificate from der")?;
@@ -43,10 +38,13 @@ pub fn verify_cert_der<Verifier: GenericVerifier>(
     };
     /* endorsements extension is optional */
 
-    let (_tag, raw_evidence, claims_buffer) = parse_evidence_buffer_with_tag(evidence_buffer)?;
-    // TODO: match verifier by tag
+    let (tag, raw_evidence, claims_buffer) = parse_evidence_buffer_with_tag(evidence_buffer)?;
 
-    let evidence = Verifier::Evidence::from_raw_evidence(&raw_evidence);
+    let evidence = crate::tee::AutoEvidence::create_evidence_from_dice(tag, &raw_evidence)?;
+    let tee_type = evidence.get_tee_type();
+    debug!("TEE type of this cert is {:?}", tee_type);
+    let verifier = AutoVerifier::new();
+
     /* Note: the hash algo is hardcoded to sha256, as defined in the Interoperable RA-TLS */
     let claims_buffer_hash = DefaultCrypto::hash(HashAlgo::Sha256, &claims_buffer);
     let builtin_claims = verifier.verify_evidence(&evidence, &claims_buffer_hash)?;
@@ -147,7 +145,12 @@ fn verify_signed_data(
                     rsa::pss::VerifyingKey::<sha2::Sha512>::new(rsa::RsaPublicKey::try_from(spki)?)
                         .verify(signed_data, &signature.try_into()?)?
                 }
-                _ => return Err(format!("unsupported PSS hash algo {}", params.hash.oid).into()),
+                _ => {
+                    return Err(Error::kind_with_msg(
+                        ErrorKind::UnsupportedHashAlgo,
+                        format!("unsupported PSS hash algo {}", params.hash.oid),
+                    ))
+                }
             }
         }
 

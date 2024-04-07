@@ -1,5 +1,6 @@
 use super::HashAlgo;
-use crate::{claims::Claims, errors::*};
+use crate::errors::*;
+use crate::tee::claims::Claims;
 
 use ciborium::Value;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -31,7 +32,7 @@ impl TryFrom<HashAlgoIanaId> for HashAlgo {
             7 => Self::Sha384,
             8 => Self::Sha512,
             _ => Err(Error::kind_with_msg(
-                ErrorKind::Unsupported,
+                ErrorKind::UnsupportedHashAlgo,
                 format!("unsupported hash-alg-id: {}", value),
             ))?,
         })
@@ -198,11 +199,10 @@ pub fn parse_pubkey_hash_value_buffer(
 pub mod tests {
 
     use super::*;
-    use crate::attester::GenericEvidence;
 
     #[test]
     fn test_generate_evidence_buffer_with_tag() -> Result<()> {
-        let expected_tag = crate::attester::sgx_dcap::SgxDcapEvidence::DICE_OCBR_TAG;
+        let expected_tag = OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE;
         let expected_raw_evidence = b"\x01\x02\x03\x04";
         let expected_claims_buffer = b"\x05\x06\x07\x08";
 

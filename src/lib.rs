@@ -1,38 +1,13 @@
 #![feature(specialization)]
 #![allow(incomplete_features)]
 
-pub mod attester;
 mod cert;
-mod claims;
 mod crypto;
 mod errors;
+pub mod tee;
 pub mod transport;
-pub mod verifier;
 
 pub use crate::cert::{verify_cert_der, CertBuilder};
-
-#[cfg(not(any(
-    feature = "build-mode-host",
-    feature = "build-mode-occlum",
-    feature = "build-mode-sgx"
-)))]
-compile_error!("At least one `build-mode-*` feature should be enabled");
-
-#[cfg(any(
-    all(
-        feature = "build-mode-host",
-        any(feature = "build-mode-occlum", feature = "build-mode-sgx")
-    ),
-    all(
-        feature = "build-mode-occlum",
-        any(feature = "build-mode-host", feature = "build-mode-sgx")
-    ),
-    all(
-        feature = "build-mode-sgx",
-        any(feature = "build-mode-host", feature = "build-mode-occlum")
-    ),
-))]
-compile_error!("more than one `build-mode-*` features cannot be enabled at the same time");
 
 #[cfg(all(feature = "is_sync", feature = "async-tokio"))]
 compile_error!("features `is_sync` and `async-tokio` are mutually exclusive");
@@ -41,10 +16,11 @@ compile_error!("features `is_sync` and `async-tokio` are mutually exclusive");
 pub mod tests {
 
     use self::{
-        attester::sgx_dcap::SgxDcapAttester,
         crypto::{AsymmetricAlgo, HashAlgo},
+        tee::claims::Claims,
+        tee::sgx_dcap::attester::SgxDcapAttester,
     };
-    use crate::{cert::CertBuilder, claims::Claims, errors::*};
+    use crate::{cert::CertBuilder, errors::*};
 
     use super::*;
 

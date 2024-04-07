@@ -6,7 +6,7 @@ rats-rs是一个纯Rust的CPU-TEE SPDM远程证明和安全传输实现，它建
 
 在设计上，该项目尽量模块化，并通过cargo的features来进行条件编译，（现在或者未来）包含如下模块：
 - `attester` / `verifier`：不同CPU TEE的证明和验证逻辑的实现
-    - 现在包含了SGX-DCAP（ECDSA）的支持，由`build-mode-occlum`和`verifier-sgx-ecdsa`控制
+    - 现在包含了SGX-DCAP（ECDSA）的支持，由`attester-sgx-dcap-occlum`和`verifier-sgx-dcap`控制
 - `crypto`：提供密码学原语的抽象接口，例如hash、非对称加密（签名）
     - 目前的提供了一个基于[RustCrypto](https://github.com/RustCrypto)的实现（通过`crypto-rustcrypto`控制），未来可以考虑提供基于[ring](https://github.com/briansmith/ring)或者[rust-openssl](https://github.com/sfackler/rust-openssl)的实现
 - `cert`：提供证书的生成和签名验证实现。
@@ -35,7 +35,22 @@ rats-rs是一个纯Rust的CPU-TEE SPDM远程证明和安全传输实现，它建
 
 ### 单元测试
 
-出于时间原因，本项目目前只对部分组件提供了单元测试。
+> [!NOTE]  
+> 由于时间原因，本项目目前只对部分组件提供了单元测试。
+
+本项目目前支持在非TEE环境和Occlum环境运行。由于部分逻辑依赖于TEE环境的支持，一些测试在非TEE环境中会被跳过，因此建议在Host和Occlum环境中分别运行一次单元测试。
+
+- 在Host环境运行单元测试
+
+```sh
+just run-test-in-host
+```
+
+- 在Occlum环境运行单元测试
+
+```sh
+just run-test-in-occlum
+```
 
 ### 集成测试
 

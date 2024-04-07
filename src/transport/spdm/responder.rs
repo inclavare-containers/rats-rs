@@ -27,8 +27,8 @@ use spdmlib::{
 };
 use spin::Mutex;
 extern crate alloc;
-use crate::attester::sgx_dcap::SgxDcapAttester;
 use crate::crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo};
+use crate::tee::sgx_dcap::attester::SgxDcapAttester;
 use crate::transport::spdm::io::FramedStream;
 use crate::transport::spdm::transport::SimpleTransportEncap;
 use crate::transport::GenericSecureTransPort;
@@ -372,9 +372,9 @@ pub mod tests {
     use spdmlib::crypto::cert_operation::DefaultCertValidationStrategy;
 
     use crate::{
-        attester::sgx_dcap::SgxDcapAttester,
         cert::CertBuilder,
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
+        tee::sgx_dcap::attester::SgxDcapAttester,
         transport::spdm::secret::{
             asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
             cert_provider::{tests::DummyCertProvider, RatsCertProvider},

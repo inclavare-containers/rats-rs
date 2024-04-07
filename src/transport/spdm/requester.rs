@@ -15,10 +15,10 @@ use super::secret::cert_validation::ValidationContext;
 use super::secret::measurement::DummyMeasurementProvider;
 use super::transport::SimpleTransportEncap;
 use super::VerifyMode;
-use crate::attester::sgx_dcap::SgxDcapAttester;
 use crate::crypto::AsymmetricAlgo;
 use crate::crypto::DefaultCrypto;
 use crate::crypto::HashAlgo;
+use crate::tee::AutoAttester;
 use crate::transport::GenericSecureTransPort;
 use crate::CertBuilder;
 use common::SpdmTransportEncap;
@@ -73,7 +73,7 @@ impl SpdmRequesterBuilder {
         S: Read + Write + Send + Sync + 'static,
     {
         let (cert_provider, asym_signer) = if cfg!(feature = "mut-auth") && self.attest_self {
-            let attester = SgxDcapAttester::new();
+            let attester = AutoAttester::new();
             let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
             let cert =
                 CertBuilder::new(attester, HashAlgo::Sha256).build_der_with_private_key(&key)?;
@@ -326,9 +326,9 @@ pub mod tests {
     };
 
     use crate::{
-        attester::sgx_dcap::SgxDcapAttester,
         cert::CertBuilder,
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
+        tee::sgx_dcap::attester::SgxDcapAttester,
         transport::spdm::secret::{
             asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
             cert_provider::{tests::DummyCertProvider, EmptyCertProvider, RatsCertProvider},

@@ -1,6 +1,9 @@
-use super::{GenericAttester, GenericEvidence};
-use crate::{cert::dice::fields::OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE, errors::*};
+#[cfg(not(any(feature = "attester-sgx-dcap-occlum")))]
+compile_error!("At least one `attester-sgx-dcap-*` feature should be enabled");
 
+use super::evidence::SgxDcapEvidence;
+use crate::errors::*;
+use crate::tee::GenericAttester;
 use occlum_dcap::{sgx_report_data_t, DcapQuote};
 
 #[derive(Debug, Default)]
@@ -15,8 +18,8 @@ impl SgxDcapAttester {
 impl GenericAttester for SgxDcapAttester {
     type Evidence = SgxDcapEvidence;
 
-    fn get_evidence(&self, report_data: &[u8]) -> crate::errors::Result<Self::Evidence> {
-        if cfg!(feature = "build-mode-occlum") {
+    fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
+        if cfg!(feature = "attester-sgx-dcap-occlum") {
             if report_data.len() > 64 {
                 Err(Error::kind_with_msg(
                     ErrorKind::InvalidParameter,
@@ -37,7 +40,7 @@ impl GenericAttester for SgxDcapAttester {
                     occlum_quote.as_mut_ptr(),
                     &sgx_report_data as *const sgx_report_data_t,
                 )
-                .kind(ErrorKind::AttesterSgxEcdsaGenerateQuoteFailed)
+                .kind(ErrorKind::SgxDcapAttesterGenerateQuoteFailed)
                 .context("failed at generate_quote()")?;
 
             Ok(SgxDcapEvidence { data: occlum_quote })
@@ -47,19 +50,10 @@ impl GenericAttester for SgxDcapAttester {
     }
 }
 
-#[derive(Debug)]
-pub struct SgxDcapEvidence {
-    pub(crate) data: Vec<u8>,
-}
-
-impl GenericEvidence for SgxDcapEvidence {
-    const DICE_OCBR_TAG: u64 = OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE;
-
-    fn get_raw_evidence_dice(&self) -> &[u8] {
-        self.data.as_slice()
+pub fn detect_env() -> bool {
+    /* We only support occlum now */
+    if cfg!(feature = "attester-sgx-dcap-occlum") && std::env::var("OCCLUM").is_ok() {
+        return true;
     }
-
-    fn from_raw_evidence(bytes: &[u8]) -> Self {
-        Self { data: bytes.into() }
-    }
+    return false;
 }
