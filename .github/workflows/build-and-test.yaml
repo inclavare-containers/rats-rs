@@ -3,8 +3,8 @@ name: Basic Compilation Check
 on: [push, pull_request]
 
 jobs:
-  basic_complication_check:
-    container: ghcr.io/imlk0/rats-rs-dev:master
+  build-and-test:
+    container: ghcr.io/imlk0/rats-rs:master
 
     runs-on: ubuntu-20.04
 
@@ -15,9 +15,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
         with:
           submodules: recursive
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }} # https://github.com/actions/checkout/issues/116#issuecomment-644419389
 
       - name: Compile ${{ github.repository }}
         run:
