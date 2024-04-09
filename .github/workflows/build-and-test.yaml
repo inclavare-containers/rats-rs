@@ -1,0 +1,30 @@
+name: Basic Compilation Check
+
+on: [push, pull_request]
+
+jobs:
+  basic_complication_check:
+    container: ghcr.io/imlk0/rats-rs-dev:master
+
+    runs-on: ubuntu-20.04
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Compile ${{ github.repository }}
+        run:
+          cargo build
+        env:
+          HOME: /root
+
+      - name: Run unit test ${{ github.repository }}
+        run:
+          just run-test-in-host
+        env:
+          HOME: /root

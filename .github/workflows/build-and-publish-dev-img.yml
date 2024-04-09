@@ -6,7 +6,7 @@ on: [workflow_dispatch]
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: rats-rs-dev
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push-image:
