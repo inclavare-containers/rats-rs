@@ -80,9 +80,9 @@ pub mod tests {
             };
 
             let ca_file_path = if self.use_ecdsa {
-                "../spdm-rs/test_key/ecp384/ca.cert.der"
+                "deps/spdm-rs/test_key/ecp384/ca.cert.der"
             } else {
-                "../spdm-rs/test_key/rsa3072/ca.cert.der"
+                "deps/spdm-rs/test_key/rsa3072/ca.cert.der"
             };
             let ca_cert = std::fs::read(ca_file_path).expect("unable to read ca cert!");
             let ca_len = ca_cert.len();

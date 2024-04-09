@@ -58,25 +58,25 @@ pub mod tests {
             };
 
             let ca_file_path = if self.use_ecdsa {
-                "../spdm-rs/test_key/ecp384/ca.cert.der"
+                "deps/spdm-rs/test_key/ecp384/ca.cert.der"
             } else {
-                "../spdm-rs/test_key/rsa3072/ca.cert.der"
+                "deps/spdm-rs/test_key/rsa3072/ca.cert.der"
             };
             let ca_cert = std::fs::read(ca_file_path).expect("unable to read ca cert!");
             let inter_file_path = if self.use_ecdsa {
-                "../spdm-rs/test_key/ecp384/inter.cert.der"
+                "deps/spdm-rs/test_key/ecp384/inter.cert.der"
             } else {
-                "../spdm-rs/test_key/rsa3072/inter.cert.der"
+                "deps/spdm-rs/test_key/rsa3072/inter.cert.der"
             };
             let inter_cert = std::fs::read(inter_file_path).expect("unable to read inter cert!");
             let leaf_file_path = match self.is_requester {
                 true => match self.use_ecdsa {
-                    true => "../spdm-rs/test_key/ecp384/end_requester.cert.der",
-                    false => "../spdm-rs/test_key/rsa3072/end_requester.cert.der",
+                    true => "deps/spdm-rs/test_key/ecp384/end_requester.cert.der",
+                    false => "deps/spdm-rs/test_key/rsa3072/end_requester.cert.der",
                 },
                 false => match self.use_ecdsa {
-                    true => "../spdm-rs/test_key/ecp384/end_responder.cert.der",
-                    false => "../spdm-rs/test_key/rsa3072/end_responder.cert.der",
+                    true => "deps/spdm-rs/test_key/ecp384/end_responder.cert.der",
+                    false => "deps/spdm-rs/test_key/rsa3072/end_responder.cert.der",
                 },
             };
 
