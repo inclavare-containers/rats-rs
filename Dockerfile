@@ -44,7 +44,7 @@ RUN apt-get update -y && apt-get install -y libsgx-headers="$SGX_SDK_VERSION*" \
         libsgx-uae-service="$SGX_SDK_VERSION*" \
         libsgx-dcap-quote-verify-dev="$SGX_DCAP_VERSION*" \
         libsgx-dcap-ql-dev="$SGX_DCAP_VERSION*" \
-        libsgx-dcap-default-qpl="$SGX_DCAP_VERSION*"
+        libsgx-dcap-default-qpl-dev="$SGX_DCAP_VERSION*"
 
 # install tdx
 RUN apt-get install -y libtdx-attest-dev="$SGX_DCAP_VERSION*"
