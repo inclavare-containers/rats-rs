@@ -39,14 +39,14 @@ itertools = "0.12.1"
 indexmap = {version = "2.2.6", features = ["std", "serde"]}
 
 [patch."https://github.com/ccc-spdm-tools/spdm-rs"]
-codec = {path = '../spdm-rs/codec'}
-spdmlib = {path = '../spdm-rs/spdmlib'}
+codec = {path = 'deps/spdm-rs/codec'}
+spdmlib = {path = 'deps/spdm-rs/spdmlib'}
 
 # copy from Cargo.toml of spdm-rs
 [patch.crates-io]
-mbedtls-platform-support = {path = "../spdm-rs/spdmlib_crypto_mbedtls/mbedtls-platform-support"}
-ring = {path = "../spdm-rs/external/ring"}
-webpki = {path = "../spdm-rs/external/webpki"}
+mbedtls-platform-support = {path = "deps/spdm-rs/spdmlib_crypto_mbedtls/mbedtls-platform-support"}
+ring = {path = "deps/spdm-rs/external/ring"}
+webpki = {path = "deps/spdm-rs/external/webpki"}
 
 [features]
 async-tokio = ["dep:tokio"]
