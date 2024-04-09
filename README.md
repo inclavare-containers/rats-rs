@@ -1,4 +1,7 @@
 # rats-rs
+[![Testing](https://github.com/imlk0/rats-rs/actions/workflows/build-and-test.yaml/badge.svg)](https://github.com/imlk0/rats-rs/actions/workflows/build-and-test.yaml)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 
 rats-rs是一个纯Rust的CPU-TEE SPDM远程证明和安全传输实现，它建立在[spdm-rs](https://github.com/ccc-spdm-tools/spdm-rs)之上。
 

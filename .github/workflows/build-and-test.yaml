@@ -1,4 +1,4 @@
-name: Basic Compilation Check
+name: Testing
 
 on: [push, pull_request]
 
