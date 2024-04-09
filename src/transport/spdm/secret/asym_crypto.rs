@@ -54,17 +54,17 @@ impl SecretAsymSigner for RatsSecretAsymSigner {
                 match base_hash_algo {
                     SpdmBaseHashAlgo::TPM_ALG_SHA_256 => {
                         rsa::pss::SigningKey::<sha2::Sha256>::new(key.clone())
-                            .sign_with_rng(&mut rand::rngs::OsRng, data)
+                            .sign_with_rng(&mut rand::thread_rng(), data)
                             .to_bytes()
                     }
                     SpdmBaseHashAlgo::TPM_ALG_SHA_384 => {
                         rsa::pss::SigningKey::<sha2::Sha256>::new(key.clone())
-                            .sign_with_rng(&mut rand::rngs::OsRng, data)
+                            .sign_with_rng(&mut rand::thread_rng(), data)
                             .to_bytes()
                     }
                     SpdmBaseHashAlgo::TPM_ALG_SHA_512 => {
                         rsa::pss::SigningKey::<sha2::Sha256>::new(key.clone())
-                            .sign_with_rng(&mut rand::rngs::OsRng, data)
+                            .sign_with_rng(&mut rand::thread_rng(), data)
                             .to_bytes()
                     }
                     _ => unreachable!(),
@@ -76,17 +76,17 @@ impl SecretAsymSigner for RatsSecretAsymSigner {
                 match base_hash_algo {
                     SpdmBaseHashAlgo::TPM_ALG_SHA_256 => {
                         rsa::pkcs1v15::SigningKey::<sha2::Sha256>::new(key.clone())
-                            .sign_with_rng(&mut rand::rngs::OsRng, data)
+                            .sign_with_rng(&mut rand::thread_rng(), data)
                             .to_bytes()
                     }
                     SpdmBaseHashAlgo::TPM_ALG_SHA_384 => {
                         rsa::pkcs1v15::SigningKey::<sha2::Sha256>::new(key.clone())
-                            .sign_with_rng(&mut rand::rngs::OsRng, data)
+                            .sign_with_rng(&mut rand::thread_rng(), data)
                             .to_bytes()
                     }
                     SpdmBaseHashAlgo::TPM_ALG_SHA_512 => {
                         rsa::pkcs1v15::SigningKey::<sha2::Sha256>::new(key.clone())
-                            .sign_with_rng(&mut rand::rngs::OsRng, data)
+                            .sign_with_rng(&mut rand::thread_rng(), data)
                             .to_bytes()
                     }
                     _ => unreachable!(),
@@ -104,7 +104,7 @@ impl SecretAsymSigner for RatsSecretAsymSigner {
                 }
                 let sign_key = p256::ecdsa::SigningKey::from(key);
                 let k: p256::ecdsa::Signature =
-                    sign_key.sign_with_rng(&mut rand::rngs::OsRng, data);
+                    sign_key.sign_with_rng(&mut rand::thread_rng(), data);
                 k.to_vec().into()
             }
             _ => {

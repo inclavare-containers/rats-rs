@@ -215,7 +215,32 @@ impl MeasurementProvider for EmptyMeasurementProvider {
         measurement_hash_algo: SpdmMeasurementHashAlgo,
         measurement_index: usize,
     ) -> Option<SpdmMeasurementRecordStructure> {
-        None
+        if measurement_specification != SpdmMeasurementSpecification::DMTF {
+            error!("Unsupported measurement specification: {measurement_specification:?}");
+            return None;
+        }
+
+        if measurement_index
+            == SpdmMeasurementOperation::SpdmMeasurementQueryTotalNumber.get_u8() as usize
+        {
+            /* Get number of measurements */
+            Some(SpdmMeasurementRecordStructure {
+                number_of_blocks: 0, /* No measurements */
+                ..Default::default()
+            })
+        } else if measurement_index
+        == SpdmMeasurementOperation::SpdmMeasurementRequestAll.get_u8() as usize /* Get all measurements */
+        || measurement_index == RATS_MEASUREMENT_BLOCK_INDEX as usize
+        /* Note that since we only have one measurement block so it is ok to merge two if branch here. */
+        {
+            Some(SpdmMeasurementRecordStructure {
+                number_of_blocks: 0, /* No measurements */
+                measurement_record_length: u24::new(0u32),
+                measurement_record_data: [0u8; config::MAX_SPDM_MEASUREMENT_RECORD_SIZE],
+            })
+        } else {
+            None
+        }
     }
 
     fn generate_measurement_summary_hash(
@@ -226,6 +251,19 @@ impl MeasurementProvider for EmptyMeasurementProvider {
         measurement_hash_algo: SpdmMeasurementHashAlgo,
         measurement_summary_hash_type: SpdmMeasurementSummaryHashType,
     ) -> Option<SpdmDigestStruct> {
-        None
+        match measurement_summary_hash_type {
+            SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeAll
+            | SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeTcb => {
+                let measurement_record_data = [0u8; config::MAX_SPDM_MEASUREMENT_RECORD_SIZE];
+                let measurement_record_length = 0;
+                let digest = hash::hash_all(
+                    base_hash_algo,
+                    &measurement_record_data[..measurement_record_length],
+                )?;
+                Some(digest)
+            }
+            SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeNone => None,
+            _ => None,
+        }
     }
 }

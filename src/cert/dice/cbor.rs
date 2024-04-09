@@ -240,7 +240,7 @@ pub mod tests {
 
         assert_eq!(
             hex::encode(&claims_buffer),
-            "a2646b6579324676616c756532646b6579314676616c756531" /* {"key2": h'76616c756532', "key1": h'76616c756531'} */
+            "a2646b6579314676616c756531646b6579324676616c756532" /* {"key1": h'76616c756531', "key2": h'76616c756532'} */
         );
 
         let deserialized = parse_claims_buffer(&claims_buffer)?;

@@ -69,7 +69,7 @@ pub struct DefaultCrypto {}
 
 impl DefaultCrypto {
     pub fn gen_private_key(algo: AsymmetricAlgo) -> Result<AsymmetricPrivateKey> {
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = rand::thread_rng();
         match algo {
             AsymmetricAlgo::Rsa2048 => Ok(AsymmetricPrivateKey::Rsa2048(rsa::RsaPrivateKey::new(
                 &mut rng, 2048,
@@ -115,19 +115,24 @@ impl DefaultCrypto {
 #[cfg(test)]
 pub mod tests {
 
+    use rayon::iter::{IntoParallelIterator as _, ParallelIterator};
+
     use super::*;
 
     #[test]
     fn test_gen_private_key() -> Result<()> {
-        for algo in [
+        [
             AsymmetricAlgo::Rsa2048,
             AsymmetricAlgo::Rsa3072,
             AsymmetricAlgo::Rsa4096,
             AsymmetricAlgo::P256,
-        ] {
+        ]
+        .into_par_iter()
+        .map(|algo| {
             let key = DefaultCrypto::gen_private_key(algo)?.to_pkcs8_pem()?;
             println!("generated {:?} key:\n{}", algo, key.as_str());
-        }
-        Ok(())
+            Ok(())
+        })
+        .collect()
     }
 }

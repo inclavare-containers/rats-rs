@@ -17,7 +17,7 @@ pub mod tests {
         cert::CertBuilder,
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
         errors::*,
-        tee::{claims::Claims, sgx_dcap::attester::SgxDcapAttester},
+        tee::{claims::Claims, AutoAttester, TeeType},
     };
 
     #[allow(unused_imports)]
@@ -25,12 +25,17 @@ pub mod tests {
 
     #[test]
     fn test_get_attestation_certificate() -> Result<()> {
+        if TeeType::detect_env() == None {
+            /* skip */
+            return Ok(());
+        }
+
         let mut claims = Claims::new();
         claims.insert("key1".into(), "value1".into());
         claims.insert("key2".into(), "value2".into());
 
         /* Test without provideing key */
-        let attester = SgxDcapAttester::new();
+        let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
             .build(AsymmetricAlgo::P256)?;
@@ -42,7 +47,7 @@ pub mod tests {
         );
 
         /* Test with specific key */
-        let attester = SgxDcapAttester::new();
+        let attester = AutoAttester::new();
         let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims)

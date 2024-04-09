@@ -382,7 +382,7 @@ pub mod tests {
     use crate::{
         cert::CertBuilder,
         crypto::{AsymmetricAlgo, HashAlgo},
-        tee::{AutoAttester, AutoEvidence},
+        tee::AutoAttester,
         transport::spdm::secret::{
             asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
             cert_provider::{tests::DummyCertProvider, RatsCertProvider},
@@ -467,10 +467,29 @@ pub mod tests {
     fn test_spdm_over_tcp() -> Result<()> {
         let test_dummy = true; /* set this to `false` for testing with dice cert */
 
-        let t1 = std::thread::spawn(move || {
+        let requester_func = move || {
+            let stream =
+                TcpStream::connect("127.0.0.1:2323").expect("Couldn't connect to the server...");
+
+            #[cfg(not(feature = "is_sync"))]
+            {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(Box::pin(run_requester(test_dummy, stream)))
+                    .unwrap();
+            }
+
+            #[cfg(feature = "is_sync")]
+            {
+                run_requester(test_dummy, stream).unwrap();
+            }
+        };
+
+        let responder_func = move || {
             let listener =
                 TcpListener::bind("127.0.0.1:2323").expect("Couldn't bind to the server");
             println!("server start!");
+
+            let t2 = std::thread::spawn(requester_func);
 
             println!("waiting for next connection!");
             let (stream, _) = listener.accept().expect("Read stream error!");
@@ -486,27 +505,13 @@ pub mod tests {
             {
                 run_responder(test_dummy, stream).unwrap();
             }
-        });
 
-        let t2 = std::thread::spawn(move || {
-            let stream =
-                TcpStream::connect("127.0.0.1:2323").expect("Couldn't connect to the server...");
+            t2.join().unwrap();
+        };
 
-            #[cfg(not(feature = "is_sync"))]
-            {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(Box::pin(run_requester(test_dummy, stream)))
-                    .unwrap();
-            }
-
-            #[cfg(feature = "is_sync")]
-            {
-                run_requester(test_dummy, stream).unwrap();
-            }
-        });
+        let t1 = std::thread::spawn(responder_func);
 
         t1.join().unwrap();
-        t2.join().unwrap();
         Ok(())
     }
 }

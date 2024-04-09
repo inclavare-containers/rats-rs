@@ -50,7 +50,7 @@ pub enum TeeType {
 
 impl TeeType {
     /// Detects the current TEE environment and returns the detected TeeType.
-    fn detect_env() -> Option<Self> {
+    pub fn detect_env() -> Option<Self> {
         #[cfg(feature = "attester-sgx-dcap")]
         if sgx_dcap::attester::detect_env() {
             return Some(Self::SgxDcap);
@@ -213,7 +213,7 @@ pub mod tests {
 
 
     #[test]
-    fn test_auto_attester_and_auto_verifier_on_tee() -> Result<()> {
+    fn test_auto_attester_and_auto_verifier_on_non_tee() -> Result<()> {
         if TeeType::detect_env() != None {
             /* skip */
             return Ok(());
