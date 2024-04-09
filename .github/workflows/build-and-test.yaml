@@ -20,6 +20,12 @@ jobs:
           submodules: recursive
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }} # https://github.com/actions/checkout/issues/116#issuecomment-644419389
 
+      - name: Prepare spdm-rs
+        run:
+          cd deps/spdm-rs && sh_script/pre-build.sh
+        env:
+          HOME: /root
+
       - name: Compile ${{ github.repository }}
         run:
           cargo build
