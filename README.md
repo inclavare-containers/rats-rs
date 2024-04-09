@@ -90,12 +90,6 @@ TODO: CI/CD
 > 可使用环境变量`RATS_RS_LOG_LEVEL`来控制该程序启用的日志级别，环境变量的取值为`error`, `warn`, `info`, `debug`和`trace`，默认值为`trace`
 
 
-## 下一目标
+## License
 
-当前的实现仍然也存在一些缺陷需要解决：
-
-- [ ] 增加更完备的测试，包括对更多组件的单元测试与集成测试
-- [ ] 实现dice证书中的endorsements extension
-- [ ] 设计适用于CPU TEE的SPDM measurements映射
-- [ ] 改善当前的证书设计，提供一种更符合SPDM证书要求的证书
-
+该项目使用Apache License 2.0 许可证授权
