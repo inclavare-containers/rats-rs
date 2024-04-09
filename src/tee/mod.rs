@@ -1,8 +1,10 @@
 use std::any::Any;
 
 use crate::errors::*;
+use self::claims::Claims;
 
 pub mod claims;
+#[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap"))]
 pub mod sgx_dcap;
 
 /// Trait representing generic evidence.
@@ -11,10 +13,13 @@ pub trait GenericEvidence: Any {
     fn get_dice_cbor_tag(&self) -> u64;
 
     /// Return the raw evidence data used for generating DICE cert.
-    fn get_raw_evidence_dice(&self) -> &[u8];
+    fn get_dice_raw_evidence(&self) -> &[u8];
 
     /// Return the type of Trusted Execution Environment (TEE) associated with the evidence.
     fn get_tee_type(&self) -> TeeType;
+
+    /// Parse the evidence and return a set of claims.
+    fn get_claims(&self) ->  Result<Claims>;
 }
 
 /// Trait representing a generic attester.
@@ -29,12 +34,12 @@ pub trait GenericAttester {
 pub trait GenericVerifier {
     type Evidence: GenericEvidence;
 
-    /// Verifiy the provided evidence against the given report data and return claims if verification succeeds.
+    /// Verifiy the provided evidence against the given report data.
     fn verify_evidence(
         &self,
         evidence: &Self::Evidence,
         report_data: &[u8],
-    ) -> Result<claims::Claims>;
+    ) -> Result<()>;
 }
 
 /// Enum representing different types of TEEs.
@@ -81,12 +86,16 @@ impl GenericEvidence for AutoEvidence {
         self.0.get_dice_cbor_tag()
     }
 
-    fn get_raw_evidence_dice(&self) -> &[u8] {
-        self.0.get_raw_evidence_dice()
+    fn get_dice_raw_evidence(&self) -> &[u8] {
+        self.0.get_dice_raw_evidence()
     }
 
     fn get_tee_type(&self) -> TeeType {
         self.0.get_tee_type()
+    }
+    
+    fn get_claims(&self) -> Result<Claims> {
+        self.0.get_claims()
     }
 }
 
@@ -146,7 +155,7 @@ impl GenericVerifier for AutoVerifier {
         &self,
         evidence: &Self::Evidence,
         report_data: &[u8],
-    ) -> Result<claims::Claims> {
+    ) -> Result<()> {
         let tee_type = evidence.0.get_tee_type();
         let evidence = evidence.0.as_ref()as &dyn Any;
         match tee_type {
@@ -191,7 +200,9 @@ pub mod tests {
         let evidence = attester.get_evidence(report_data)?;
         assert_eq!(evidence.get_tee_type(), TeeType::SgxDcap);
         let verifier = AutoVerifier::new();
-        let claims = verifier.verify_evidence(&evidence, report_data)?;
+        assert_eq!(verifier.verify_evidence(&evidence, report_data), Ok(()));
+
+        let claims = evidence.get_claims()?;
         println!("generated claims:\n{:?}", claims);
 
         assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_QUOTE));

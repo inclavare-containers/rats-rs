@@ -150,7 +150,7 @@ pub fn parse_evidence_buffer_with_tag(
 
 // TODO: endorsement buffer
 
-/// claims-buffer is a byte string of definite-length encoded CBOR map of one or two custom claims, with each claim name in text string format, and its value in byte string format.
+/// The helper is used to serialize claims and forces Serde to treat values as bytes instead of slice of `u8`.
 struct ClaimsHelper<'a>(&'a Claims);
 
 impl<'a> Serialize for ClaimsHelper<'a> {
@@ -164,6 +164,7 @@ impl<'a> Serialize for ClaimsHelper<'a> {
     }
 }
 
+/// The claims-buffer is a byte string of definite-length encoded CBOR map of one or two custom claims, with each claim name in text string format, and its value in byte string format.
 pub fn generate_claims_buffer(claims: &Claims) -> Result<Vec<u8>> {
     let mut res = vec![];
     ciborium::into_writer(&ClaimsHelper(claims), &mut res)?;

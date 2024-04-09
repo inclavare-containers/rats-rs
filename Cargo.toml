@@ -35,6 +35,7 @@ tokio = {version = "1.36.0", features = ["full"], optional = true}
 x509-cert = {version = "0.2.5", features = ["builder"], optional = true}
 zeroize = "1.7.0"
 bstr = "1.9.1"
+itertools = "0.12.1"
 
 [patch."https://github.com/ccc-spdm-tools/spdm-rs"]
 codec = {path = '../spdm-rs/codec'}
@@ -53,7 +54,7 @@ default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "v
 # default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "verifier-sgx-dcap", "async-tokio"]
 is_sync = ["maybe-async/is_sync", "spdmlib/is_sync"]
 transport-spdm = ["dep:spdmlib", "dep:codec", "dep:ring"]
-attester-sgx-dcap = []
+attester-sgx-dcap = ["dep:sgx-dcap-quoteverify-sys"]
 attester-sgx-dcap-occlum = ["attester-sgx-dcap", "dep:occlum_dcap"]
 attester-sgx-dcap-enclave = [] # TODO: plain enclave mode
 verifier-sgx-dcap = ["dep:sgx-dcap-quoteverify-rs", "dep:sgx-dcap-quoteverify-sys"]

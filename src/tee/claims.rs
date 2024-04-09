@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+// TODO: replace with indexmap::map::IndexMap for deterministic order
 pub type Claims = HashMap<String, Vec<u8>>;
 
 /* Common built-in claims */

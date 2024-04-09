@@ -1,5 +1,5 @@
 use super::dice::extensions::{OID_TCG_DICE_ENDORSEMENT_MANIFEST, OID_TCG_DICE_TAGGED_EVIDENCE};
-use super::dice::fields::{
+use super::dice::cbor::{
     parse_claims_buffer, parse_evidence_buffer_with_tag, parse_pubkey_hash_value_buffer,
 };
 use super::CLAIM_NAME_PUBLIC_KEY_HASH;
@@ -47,7 +47,8 @@ pub fn verify_cert_der(cert: &[u8]) -> Result<Claims> {
 
     /* Note: the hash algo is hardcoded to sha256, as defined in the Interoperable RA-TLS */
     let claims_buffer_hash = DefaultCrypto::hash(HashAlgo::Sha256, &claims_buffer);
-    let builtin_claims = verifier.verify_evidence(&evidence, &claims_buffer_hash)?;
+    verifier.verify_evidence(&evidence, &claims_buffer_hash)?;
+    let builtin_claims = evidence.get_claims()?;
     let custom_claims = parse_claims_buffer(&claims_buffer)?;
 
     let pubkey_hash_value_buffer =

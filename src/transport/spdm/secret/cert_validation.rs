@@ -26,18 +26,16 @@ impl CertValidationStrategy for RatsCertValidationStrategy {
                 // TODO: check BUILT_IN_CLAIM_SGX_MR_ENCLAVE etc.
                 info!(
                     "{}:\t{}",
-                    crate::tee::sgx_dcap::verifier::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE,
+                    crate::tee::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE,
                     hex::encode(
-                        &claims
-                            [crate::tee::sgx_dcap::verifier::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE]
+                        &claims[crate::tee::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE]
                     ),
                 );
                 info!(
                     "{}:\t{}",
-                    crate::tee::sgx_dcap::verifier::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER,
+                    crate::tee::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER,
                     hex::encode(
-                        &claims
-                            [crate::tee::sgx_dcap::verifier::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER]
+                        &claims[crate::tee::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER]
                     ),
                 );
                 Ok(())

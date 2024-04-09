@@ -75,7 +75,7 @@ struct ClientOptions {
 
 fn main() -> Result<()> {
     let env = env_logger::Env::default()
-        .filter_or("RATS_RS_LOG_LEVEL", "trace")
+        .filter_or("RATS_RS_LOG_LEVEL", "debug")
         .write_style_or("RATS_RS_LOG_STYLE", "always"); // enable color
     env_logger::Builder::from_env(env)
         // .format_indent(None) // No indent for each line

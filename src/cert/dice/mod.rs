@@ -1,5 +1,5 @@
 pub mod extensions;
-pub mod fields;
+pub mod cbor;
 
 use self::extensions::{DiceEndorsementExtension, DiceEvidenceExtension};
 use crate::crypto::{AsymmetricPrivateKey, HashAlgo};
@@ -15,7 +15,7 @@ use x509_cert::spki::SubjectPublicKeyInfoOwned;
 use x509_cert::time::Validity;
 use x509_cert::Certificate;
 
-pub fn generate_and_sign_dice_cert(
+pub(crate) fn generate_and_sign_dice_cert(
     subject: &str,
     hash_algo: HashAlgo,
     private_key: &AsymmetricPrivateKey,

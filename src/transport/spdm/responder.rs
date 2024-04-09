@@ -7,7 +7,7 @@ use super::secret::cert_provider::{CertProvider, EmptyCertProvider, RatsCertProv
 use super::secret::cert_validation::{
     EmptyValidationContext, RatsCertValidationStrategy, ValidationContext,
 };
-use super::secret::measurement::DummyMeasurementProvider;
+use super::secret::measurement::{EmptyMeasurementProvider, RatsMeasurementProvider};
 use super::VerifyMode;
 use codec::Codec;
 use common::SpdmTransportEncap;
@@ -17,6 +17,7 @@ use spdmlib::common::session::SpdmSessionState;
 use spdmlib::common::{SecuredMessageVersion, SpdmOpaqueSupport};
 use spdmlib::crypto::cert_operation::{CertValidationStrategy, DefaultCertValidationStrategy};
 use spdmlib::secret::asym_sign::{DefaultSecretAsymSigner, SecretAsymSigner};
+use spdmlib::secret::measurement::MeasurementProvider;
 use std::io::{Read, Write};
 // TODO: secret_impl_sample for measurements
 // use spdm_emu::{secret_impl_sample::*, EMU_STACK_SIZE};
@@ -27,8 +28,8 @@ use spdmlib::{
 };
 use spin::Mutex;
 extern crate alloc;
-use crate::crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo};
-use crate::tee::sgx_dcap::attester::SgxDcapAttester;
+use crate::crypto::{AsymmetricAlgo, HashAlgo};
+use crate::tee::AutoAttester;
 use crate::transport::spdm::io::FramedStream;
 use crate::transport::spdm::transport::SimpleTransportEncap;
 use crate::transport::GenericSecureTransPort;
@@ -65,21 +66,26 @@ impl SpdmResponderBuilder {
     where
         S: Read + Write + Send + Sync + 'static,
     {
-        let (cert_provider, asym_signer) = if self.attest_self {
+        let (cert_provider, asym_signer, measurement_provider) = if self.attest_self {
             // TODO: generate cert and key for each handshake and check nonce from user
-            let attester = SgxDcapAttester::new();
-            let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
-            let cert =
-                CertBuilder::new(attester, HashAlgo::Sha256).build_der_with_private_key(&key)?;
+            let attester = AutoAttester::new();
+            let cert_bundle =
+                CertBuilder::new(attester, HashAlgo::Sha256).build(AsymmetricAlgo::P256)?;
             (
-                Box::new(RatsCertProvider::new(cert)) as Box<dyn CertProvider>,
-                Box::new(RatsSecretAsymSigner::new(key)) as Box<dyn SecretAsymSigner + Send + Sync>,
+                Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
+                    as Box<dyn CertProvider>,
+                Box::new(RatsSecretAsymSigner::new(cert_bundle.private_key().clone()))
+                    as Box<dyn SecretAsymSigner + Send + Sync>,
+                Box::new(RatsMeasurementProvider::new_from_evidence(
+                    cert_bundle.evidence(),
+                )?) as Box<dyn MeasurementProvider + Send + Sync>,
             )
         } else {
             (
                 Box::new(EmptyCertProvider {}) as Box<dyn CertProvider>,
                 Box::new(DefaultSecretAsymSigner {})
                     as Box<dyn SecretAsymSigner + Send + Sync + 'static>,
+                Box::new(EmptyMeasurementProvider {}) as Box<dyn MeasurementProvider + Send + Sync>,
             )
         };
 
@@ -105,6 +111,7 @@ impl SpdmResponderBuilder {
             validation_context,
             asym_signer,
             cert_validation_strategy,
+            measurement_provider,
         ))
     }
 }
@@ -121,6 +128,7 @@ impl SpdmResonder {
         validation_context: Box<dyn ValidationContext>,
         asym_signer: Box<dyn SecretAsymSigner + Send + Sync>,
         cert_validation_strategy: Box<dyn CertValidationStrategy + Send + Sync>,
+        measurement_provider: Box<dyn MeasurementProvider + Send + Sync>,
     ) -> Self
     where
         S: Read + Write + Send + Sync + 'static,
@@ -177,7 +185,7 @@ impl SpdmResonder {
         let context = responder::ResponderContext::new(
             device_io,
             transport_encap,
-            Box::new(DummyMeasurementProvider {}),
+            measurement_provider,
             asym_signer,
             cert_validation_strategy,
             config_info,
@@ -373,14 +381,15 @@ pub mod tests {
 
     use crate::{
         cert::CertBuilder,
-        crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
-        tee::sgx_dcap::attester::SgxDcapAttester,
+        crypto::{AsymmetricAlgo, HashAlgo},
+        tee::{AutoAttester, AutoEvidence},
         transport::spdm::secret::{
             asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
             cert_provider::{tests::DummyCertProvider, RatsCertProvider},
             cert_validation::{
                 tests::DummyValidationContext, EmptyValidationContext, RatsCertValidationStrategy,
             },
+            measurement::EmptyMeasurementProvider,
         },
     };
 
@@ -390,25 +399,32 @@ pub mod tests {
 
     #[maybe_async::maybe_async]
     pub async fn run_responder(test_dummy: bool, stream: TcpStream) -> Result<()> {
-        let (cert_provider, asym_signer, cert_validation_strategy) = if test_dummy {
-            (
-                Box::new(DummyCertProvider::new(true, false)) as Box<dyn CertProvider>,
-                Box::new(DummySecretAsymSigner {}) as Box<dyn SecretAsymSigner + Send + Sync>,
-                Box::new(DefaultCertValidationStrategy {})
-                    as Box<dyn CertValidationStrategy + Send + Sync>,
-            )
-        } else {
-            let attester = SgxDcapAttester::new();
-            let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
-            let cert =
-                CertBuilder::new(attester, HashAlgo::Sha256).build_der_with_private_key(&key)?;
-            (
-                Box::new(RatsCertProvider::new(cert)) as Box<dyn CertProvider>,
-                Box::new(RatsSecretAsymSigner::new(key)) as Box<dyn SecretAsymSigner + Send + Sync>,
-                Box::new(RatsCertValidationStrategy {})
-                    as Box<dyn CertValidationStrategy + Send + Sync>,
-            )
-        };
+        let (cert_provider, asym_signer, measurement_provider, cert_validation_strategy) =
+            if test_dummy {
+                (
+                    Box::new(DummyCertProvider::new(true, false)) as Box<dyn CertProvider>,
+                    Box::new(DummySecretAsymSigner {}) as Box<dyn SecretAsymSigner + Send + Sync>,
+                    Box::new(EmptyMeasurementProvider {})
+                        as Box<dyn MeasurementProvider + Send + Sync>,
+                    Box::new(DefaultCertValidationStrategy {})
+                        as Box<dyn CertValidationStrategy + Send + Sync>,
+                )
+            } else {
+                let attester = AutoAttester::new();
+                let cert_bundle =
+                    CertBuilder::new(attester, HashAlgo::Sha256).build(AsymmetricAlgo::P256)?;
+                (
+                    Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
+                        as Box<dyn CertProvider>,
+                    Box::new(RatsSecretAsymSigner::new(cert_bundle.private_key().clone()))
+                        as Box<dyn SecretAsymSigner + Send + Sync>,
+                    Box::new(RatsMeasurementProvider::new_from_evidence(
+                        cert_bundle.evidence(),
+                    )?) as Box<dyn MeasurementProvider + Send + Sync>,
+                    Box::new(RatsCertValidationStrategy {})
+                        as Box<dyn CertValidationStrategy + Send + Sync>,
+                )
+            };
 
         let validation_context = if cfg!(feature = "mut-auth") && test_dummy {
             Box::new(DummyValidationContext::new(true)) as Box<dyn ValidationContext>
@@ -422,6 +438,7 @@ pub mod tests {
             validation_context,
             asym_signer,
             cert_validation_strategy,
+            measurement_provider,
         );
         responder.negotiate().await?;
 

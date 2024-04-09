@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use codec::{Codec, Reader, Writer};
-use log::{error, info, warn};
+use log::{error, trace, warn};
 use spdmlib::common::SpdmDeviceIo;
 use spdmlib::config;
 use spdmlib::error::{SpdmResult, SPDM_STATUS_SEND_FAIL};
@@ -11,7 +11,7 @@ use alloc::sync::Arc;
 use core::ops::DerefMut;
 use std::io::{Read, Write};
 
-const FRAME_HEADER_LEN: usize = core::mem::size_of::<FrameHeader>();
+const FRAME_HEADER_SIZE: usize = core::mem::size_of::<FrameHeader>();
 
 #[derive(Debug, Copy, Clone, Default)]
 struct FrameHeader {
@@ -47,7 +47,7 @@ where
     pub fn new(stream: S) -> Self {
         Self {
             stream: stream,
-            read_buffer: vec![0; config::RECEIVER_BUFFER_SIZE],
+            read_buffer: vec![0; FRAME_HEADER_SIZE + config::RECEIVER_BUFFER_SIZE],
             read_remain: 0,
         }
     }
@@ -67,11 +67,11 @@ where
         let mut expected_size: usize = 0;
         let enough = loop {
             /* First, check if existing buffer is ok to return */
-            if (expected_size == 0) && (buffer_size >= FRAME_HEADER_LEN) {
-                let mut reader = Reader::init(&self.read_buffer[..FRAME_HEADER_LEN]);
-                let socket_header = FrameHeader::read(&mut reader).unwrap(); /* should always be ok since buffer_size >= FRAME_HEADER_LEN */
+            if (expected_size == 0) && (buffer_size >= FRAME_HEADER_SIZE) {
+                let mut reader = Reader::init(&self.read_buffer[..FRAME_HEADER_SIZE]);
+                let socket_header = FrameHeader::read(&mut reader).unwrap(); /* should always be ok since buffer_size >= FRAME_HEADER_SIZE */
 
-                expected_size = socket_header.payload_size.to_be() as usize + FRAME_HEADER_LEN;
+                expected_size = socket_header.payload_size.to_be() as usize + FRAME_HEADER_SIZE;
             }
             if (expected_size != 0) && (buffer_size >= expected_size) {
                 /* got enough bytes */
@@ -103,18 +103,19 @@ where
         };
 
         let read_size = std::cmp::min(buffer_size, expected_size);
-        info!(
+        trace!(
             "read framed:\t{:02x?}{:02x?}",
-            &self.read_buffer[..std::cmp::min(read_size, FRAME_HEADER_LEN)],
-            &self.read_buffer[std::cmp::min(read_size, FRAME_HEADER_LEN)..read_size]
+            &self.read_buffer[..std::cmp::min(read_size, FRAME_HEADER_SIZE)],
+            &self.read_buffer[std::cmp::min(read_size, FRAME_HEADER_SIZE)..read_size]
         );
 
         if enough {
-            let used = expected_size - FRAME_HEADER_LEN;
+            let used = expected_size - FRAME_HEADER_SIZE;
             /* copy payload to read_buffer */
             let mut read_buffer = read_buffer.lock();
             let read_buffer = read_buffer.deref_mut();
-            read_buffer[..used].copy_from_slice(&self.read_buffer[FRAME_HEADER_LEN..expected_size]);
+            read_buffer[..used]
+                .copy_from_slice(&self.read_buffer[FRAME_HEADER_SIZE..expected_size]);
 
             /* backup remain bytes */
             self.read_buffer.copy_within(expected_size..buffer_size, 0);
@@ -127,7 +128,7 @@ where
     }
 
     async fn send(&mut self, payload: Arc<&[u8]>) -> SpdmResult {
-        let mut buffer = [0u8; config::SENDER_BUFFER_SIZE];
+        let mut buffer = [0u8; FRAME_HEADER_SIZE + config::SENDER_BUFFER_SIZE];
 
         let mut writer = Writer::init(&mut buffer);
         let payload_size = payload.len();
@@ -136,7 +137,7 @@ where
         };
         assert!(header.encode(&mut writer).is_ok());
         let used = writer.used();
-        assert_eq!(used, FRAME_HEADER_LEN);
+        assert_eq!(used, FRAME_HEADER_SIZE);
 
         self.stream
             .write_all(&buffer[..used])
@@ -146,7 +147,7 @@ where
             .map_err(|_| SPDM_STATUS_SEND_FAIL)?;
         self.stream.flush().map_err(|_| SPDM_STATUS_SEND_FAIL)?;
 
-        info!("write framed:\t{:02x?}{:02x?}", &buffer[..used], payload);
+        trace!("write framed:\t{:02x?}{:02x?}", &buffer[..used], payload);
         Ok(())
     }
 

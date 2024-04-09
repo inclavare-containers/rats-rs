@@ -21,7 +21,7 @@ pub enum AsymmetricAlgo {
 }
 
 // TODO: try refactor AsymmetricPrivateKey to AsymmetricAlgo + trait object
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AsymmetricPrivateKey {
     Rsa2048(rsa::RsaPrivateKey),
     Rsa3072(rsa::RsaPrivateKey),
@@ -40,9 +40,6 @@ impl AsymmetricPrivateKey {
     }
 
     pub fn from_pkcs8_pem(private_key_pkcs8: &str) -> Result<Self> {
-        // let (label, doc) = SecretDocument::from_pem(private_key_pkcs8)?;
-        // PrivateKeyInfo::from_pem(label)?;
-
         if let Ok(key) = rsa::RsaPrivateKey::from_pkcs8_pem(&private_key_pkcs8) {
             let bit_len = key.n().bits();
             match bit_len {

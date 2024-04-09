@@ -1,4 +1,4 @@
-use super::dice::fields::{
+use super::dice::cbor::{
     generate_claims_buffer, generate_evidence_buffer_with_tag, generate_pubkey_hash_value_buffer,
 };
 use super::dice::generate_and_sign_dice_cert;
@@ -12,7 +12,36 @@ use crate::tee::GenericEvidence;
 use pkcs8::der::{Encode, EncodePem};
 use pkcs8::LineEnding;
 use x509_cert::Certificate;
-use zeroize::Zeroizing;
+
+pub struct CertBundle<Evidence: GenericEvidence> {
+    private_key: AsymmetricPrivateKey,
+    cert: Certificate,
+    evidence: Evidence,
+}
+
+impl<Evidence: GenericEvidence> CertBundle<Evidence> {
+    pub fn cert_to_pem(&self) -> Result<String> {
+        self.cert
+            .to_pem(LineEnding::LF)
+            .kind(ErrorKind::GenCertError)
+            .context("failed to encode certificate as pem")
+    }
+
+    pub fn cert_to_der(&self) -> Result<Vec<u8>> {
+        self.cert
+            .to_der()
+            .kind(ErrorKind::GenCertError)
+            .context("failed to encode certificate as der")
+    }
+
+    pub fn private_key(&self) -> &AsymmetricPrivateKey {
+        &self.private_key
+    }
+
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
 
 pub struct CertBuilder<A: GenericAttester> {
     attester: A,
@@ -41,40 +70,34 @@ impl<A: GenericAttester> CertBuilder<A> {
         self
     }
 
-    /* align to librats */
-    pub fn build_pem(
-        &self,
-        private_key_algo: AsymmetricAlgo,
-    ) -> Result<(String, Zeroizing<String>)> {
+    pub fn build(&self, private_key_algo: AsymmetricAlgo) -> Result<CertBundle<A::Evidence>> {
         let key = DefaultCrypto::gen_private_key(private_key_algo)?;
+        let (cert, evidence) = self.build_with_private_key_inner(&key)?;
 
-        Ok((self.build_pem_with_private_key(&key)?, key.to_pkcs8_pem()?))
+        Ok(CertBundle {
+            private_key: key,
+            cert,
+            evidence,
+        })
     }
 
-    /* align to librats */
-    pub fn build_pem_with_pkcs8_private_key(&self, private_key: &str) -> Result<String> {
-        let key = AsymmetricPrivateKey::from_pkcs8_pem(private_key)?;
+    pub fn build_with_private_key(
+        &self,
+        key: &AsymmetricPrivateKey,
+    ) -> Result<CertBundle<A::Evidence>> {
+        let (cert, evidence) = self.build_with_private_key_inner(&key)?;
 
-        self.build_pem_with_private_key(&key)
+        Ok(CertBundle {
+            private_key: key.clone(),
+            cert,
+            evidence,
+        })
     }
 
-    fn build_pem_with_private_key(&self, key: &AsymmetricPrivateKey) -> Result<String> {
-        self.build_with_private_key_inner(key)?
-            .to_pem(LineEnding::LF)
-            .kind(ErrorKind::GenCertError)
-            .context("failed to encode certificate as pem")
-    }
-
-    /* for spdm */
-    #[allow(dead_code)]
-    pub(crate) fn build_der_with_private_key(&self, key: &AsymmetricPrivateKey) -> Result<Vec<u8>> {
-        self.build_with_private_key_inner(&key)?
-            .to_der()
-            .kind(ErrorKind::GenCertError)
-            .context("failed to encode certificate as der")
-    }
-
-    fn build_with_private_key_inner(&self, key: &AsymmetricPrivateKey) -> Result<Certificate> {
+    fn build_with_private_key_inner(
+        &self,
+        key: &AsymmetricPrivateKey,
+    ) -> Result<(Certificate, A::Evidence)> {
         /* Prepare custom claim `pubkey-hash` and add to claims map */
         let pubkey_hash = DefaultCrypto::hash_of_private_key(self.hash_algo, key)?;
         let pubkey_hash_value_buffer =
@@ -95,16 +118,18 @@ impl<A: GenericAttester> CertBuilder<A> {
         let evidence = self.attester.get_evidence(&claims_buffer_hash)?;
         let evidence_buffer = generate_evidence_buffer_with_tag(
             evidence.get_dice_cbor_tag(),
-            evidence.get_raw_evidence_dice(),
+            evidence.get_dice_raw_evidence(),
             &claims_buffer,
         )?;
 
-        generate_and_sign_dice_cert(
+        let cert = generate_and_sign_dice_cert(
             &self.subject,
             self.hash_algo,
             &key,
             &evidence_buffer,
             Some(&[]),
-        )
+        )?;
+
+        Ok((cert, evidence))
     }
 }

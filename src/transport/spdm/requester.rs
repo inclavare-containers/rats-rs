@@ -12,17 +12,20 @@ use super::secret::cert_provider::RatsCertProvider;
 use super::secret::cert_validation::EmptyValidationContext;
 use super::secret::cert_validation::RatsCertValidationStrategy;
 use super::secret::cert_validation::ValidationContext;
-use super::secret::measurement::DummyMeasurementProvider;
+use super::secret::measurement::EmptyMeasurementProvider;
+use super::secret::measurement::RatsMeasurementProvider;
 use super::transport::SimpleTransportEncap;
 use super::VerifyMode;
 use crate::crypto::AsymmetricAlgo;
-use crate::crypto::DefaultCrypto;
 use crate::crypto::HashAlgo;
+use crate::errors::*;
 use crate::tee::AutoAttester;
 use crate::transport::GenericSecureTransPort;
 use crate::CertBuilder;
+use codec::{Codec, Reader};
 use common::SpdmTransportEncap;
 use core::convert::TryFrom;
+use log::debug;
 use maybe_async::maybe_async;
 use spdmlib::common;
 use spdmlib::common::SecuredMessageVersion;
@@ -35,12 +38,11 @@ use spdmlib::protocol::*;
 use spdmlib::requester;
 use spdmlib::secret::asym_sign::DefaultSecretAsymSigner;
 use spdmlib::secret::asym_sign::SecretAsymSigner;
+use spdmlib::secret::measurement::MeasurementProvider;
 use spin::Mutex;
 use std::io::Read;
 use std::io::Write;
-extern crate alloc;
-use crate::errors::*;
-use alloc::sync::Arc;
+use std::sync::Arc;
 
 pub struct SpdmRequesterBuilder {
     verify_mode: VerifyMode,
@@ -72,20 +74,27 @@ impl SpdmRequesterBuilder {
     where
         S: Read + Write + Send + Sync + 'static,
     {
-        let (cert_provider, asym_signer) = if cfg!(feature = "mut-auth") && self.attest_self {
+        let (cert_provider, asym_signer, measurement_provider) = if cfg!(feature = "mut-auth")
+            && self.attest_self
+        {
             let attester = AutoAttester::new();
-            let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
-            let cert =
-                CertBuilder::new(attester, HashAlgo::Sha256).build_der_with_private_key(&key)?;
+            let cert_bundle =
+                CertBuilder::new(attester, HashAlgo::Sha256).build(AsymmetricAlgo::P256)?;
             (
-                Box::new(RatsCertProvider::new(cert)) as Box<dyn CertProvider>,
-                Box::new(RatsSecretAsymSigner::new(key)) as Box<dyn SecretAsymSigner + Send + Sync>,
+                Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
+                    as Box<dyn CertProvider>,
+                Box::new(RatsSecretAsymSigner::new(cert_bundle.private_key().clone()))
+                    as Box<dyn SecretAsymSigner + Send + Sync>,
+                Box::new(RatsMeasurementProvider::new_from_evidence(
+                    cert_bundle.evidence(),
+                )?) as Box<dyn MeasurementProvider + Send + Sync>,
             )
         } else {
             (
                 Box::new(EmptyCertProvider {}) as Box<dyn CertProvider>,
                 Box::new(DefaultSecretAsymSigner {})
                     as Box<dyn SecretAsymSigner + Send + Sync + 'static>,
+                Box::new(EmptyMeasurementProvider {}) as Box<dyn MeasurementProvider + Send + Sync>,
             )
         };
 
@@ -111,6 +120,7 @@ impl SpdmRequesterBuilder {
             validation_context,
             asym_signer,
             cert_validation_strategy,
+            measurement_provider,
         ))
     }
 }
@@ -127,6 +137,7 @@ impl SpdmRequester {
         validation_context: Box<dyn ValidationContext>,
         asym_signer: Box<dyn SecretAsymSigner + Send + Sync>,
         cert_validation_strategy: Box<dyn CertValidationStrategy + Send + Sync>,
+        measurement_provider: Box<dyn MeasurementProvider + Send + Sync>,
     ) -> Self
     where
         S: Read + Write + Send + Sync + 'static,
@@ -181,7 +192,7 @@ impl SpdmRequester {
         let context = requester::RequesterContext::new(
             device_io,
             transport_encap,
-            Box::new(DummyMeasurementProvider {}),
+            measurement_provider,
             asym_signer,
             cert_validation_strategy,
             config_info,
@@ -235,7 +246,8 @@ impl GenericSecureTransPort for SpdmRequester {
             .send_receive_spdm_measurement(
                 None,
                 0,
-                SpdmMeasurementAttributes::SIGNATURE_REQUESTED,
+                SpdmMeasurementAttributes::SIGNATURE_REQUESTED
+                    | SpdmMeasurementAttributes::RAW_BIT_STREAM_REQUESTED, /* Request raw bit stream so we can check measurement content provided by peer. */
                 SpdmMeasurementOperation::SpdmMeasurementRequestAll,
                 &mut content_changed,
                 &mut total_number,
@@ -251,6 +263,36 @@ impl GenericSecureTransPort for SpdmRequester {
                 ErrorKind::SpdmNegotiate,
                 "get message_m from send_receive_spdm_measurement failed",
             ))?;
+        }
+
+        {
+            /* Print measurements info for debuging */
+            let measurement_record_data = &spdm_measurement_record_structure
+                .measurement_record_data[..spdm_measurement_record_structure
+                .measurement_record_length
+                .get() as usize];
+            let mut reader = Reader::init(&measurement_record_data);
+            let mut blocks = vec![];
+            loop {
+                if let Some(block) = SpdmMeasurementBlockStructure::read(&mut reader) {
+                    blocks.push(block);
+                } else {
+                    break;
+                }
+            }
+
+            let iter = blocks.iter().map(|block| {
+                format!(
+                    "index: {}, type: {:?}, representation: {:?}, value: {}",
+                    block.index,
+                    block.measurement.r#type,
+                    block.measurement.representation,
+                    hex::encode(&block.measurement.value[..block.measurement.value_size as usize])
+                )
+            });
+            let block_str: String = itertools::Itertools::intersperse(iter, "\n".into()).collect();
+
+            debug!("Result of GET_MEASUREMENTS: number_of_blocks: {}, content_changed: {content_changed:?}, blocks:\n{}", spdm_measurement_record_structure.number_of_blocks, block_str);
         }
 
         let session_id = self
@@ -327,8 +369,7 @@ pub mod tests {
 
     use crate::{
         cert::CertBuilder,
-        crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
-        tee::sgx_dcap::attester::SgxDcapAttester,
+        crypto::{AsymmetricAlgo, HashAlgo},
         transport::spdm::secret::{
             asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
             cert_provider::{tests::DummyCertProvider, EmptyCertProvider, RatsCertProvider},
@@ -343,42 +384,50 @@ pub mod tests {
 
     #[maybe_async::maybe_async]
     pub async fn run_requester(test_dummy: bool, stream: TcpStream) -> Result<()> {
-        let (cert_provider, asym_signer, cert_validation_strategy) = if cfg!(feature = "mut-auth") {
-            if test_dummy {
-                (
-                    Box::new(DummyCertProvider::new(true, true)) as Box<dyn CertProvider>,
-                    Box::new(DummySecretAsymSigner {})
-                        as Box<dyn SecretAsymSigner + Send + Sync + 'static>,
-                    Box::new(DefaultCertValidationStrategy {})
-                        as Box<dyn CertValidationStrategy + Send + Sync>,
-                )
-            } else {
-                let attester = SgxDcapAttester::new();
-                let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
-                let cert = CertBuilder::new(attester, HashAlgo::Sha256)
-                    .build_der_with_private_key(&key)?;
-                (
-                    Box::new(RatsCertProvider::new(cert)) as Box<dyn CertProvider>,
-                    Box::new(RatsSecretAsymSigner::new(key))
-                        as Box<dyn SecretAsymSigner + Send + Sync>,
-                    Box::new(RatsCertValidationStrategy {})
-                        as Box<dyn CertValidationStrategy + Send + Sync>,
-                )
-            }
-        } else {
-            (
-                Box::new(EmptyCertProvider {}) as Box<dyn CertProvider>,
-                Box::new(DefaultSecretAsymSigner {})
-                    as Box<dyn SecretAsymSigner + Send + Sync + 'static>,
+        let (cert_provider, asym_signer, measurement_provider, cert_validation_strategy) =
+            if cfg!(feature = "mut-auth") {
                 if test_dummy {
-                    Box::new(DefaultCertValidationStrategy {})
-                        as Box<dyn CertValidationStrategy + Send + Sync>
+                    (
+                        Box::new(DummyCertProvider::new(true, true)) as Box<dyn CertProvider>,
+                        Box::new(DummySecretAsymSigner {})
+                            as Box<dyn SecretAsymSigner + Send + Sync + 'static>,
+                        Box::new(EmptyMeasurementProvider {})
+                            as Box<dyn MeasurementProvider + Send + Sync>,
+                        Box::new(DefaultCertValidationStrategy {})
+                            as Box<dyn CertValidationStrategy + Send + Sync>,
+                    )
                 } else {
-                    Box::new(RatsCertValidationStrategy {})
-                        as Box<dyn CertValidationStrategy + Send + Sync>
-                },
-            )
-        };
+                    let attester = AutoAttester::new();
+                    let cert_bundle =
+                        CertBuilder::new(attester, HashAlgo::Sha256).build(AsymmetricAlgo::P256)?;
+                    (
+                        Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
+                            as Box<dyn CertProvider>,
+                        Box::new(RatsSecretAsymSigner::new(cert_bundle.private_key().clone()))
+                            as Box<dyn SecretAsymSigner + Send + Sync>,
+                        Box::new(RatsMeasurementProvider::new_from_evidence(
+                            cert_bundle.evidence(),
+                        )?) as Box<dyn MeasurementProvider + Send + Sync>,
+                        Box::new(RatsCertValidationStrategy {})
+                            as Box<dyn CertValidationStrategy + Send + Sync>,
+                    )
+                }
+            } else {
+                (
+                    Box::new(EmptyCertProvider {}) as Box<dyn CertProvider>,
+                    Box::new(DefaultSecretAsymSigner {})
+                        as Box<dyn SecretAsymSigner + Send + Sync + 'static>,
+                    Box::new(EmptyMeasurementProvider {})
+                        as Box<dyn MeasurementProvider + Send + Sync>,
+                    if test_dummy {
+                        Box::new(DefaultCertValidationStrategy {})
+                            as Box<dyn CertValidationStrategy + Send + Sync>
+                    } else {
+                        Box::new(RatsCertValidationStrategy {})
+                            as Box<dyn CertValidationStrategy + Send + Sync>
+                    },
+                )
+            };
 
         let validation_context = if test_dummy {
             Box::new(DummyValidationContext::new(true)) as Box<dyn ValidationContext>
@@ -392,6 +441,7 @@ pub mod tests {
             validation_context,
             asym_signer,
             cert_validation_strategy,
+            measurement_provider,
         );
         requester.negotiate().await?;
 

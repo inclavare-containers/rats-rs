@@ -1,5 +1,6 @@
 #[cfg(feature = "attester-sgx-dcap")]
 pub mod attester;
+pub mod claims;
 pub mod evidence;
 #[cfg(feature = "verifier-sgx-dcap")]
 pub mod verifier;
@@ -16,10 +17,8 @@ pub mod tests {
     };
     use tests::{
         attester::SgxDcapAttester,
-        verifier::{
-            claims::{BUILT_IN_CLAIM_SGX_MR_ENCLAVE, BUILT_IN_CLAIM_SGX_MR_SIGNER},
-            SgxDcapVerifier,
-        },
+        claims::{BUILT_IN_CLAIM_SGX_MR_ENCLAVE, BUILT_IN_CLAIM_SGX_MR_SIGNER},
+        verifier::SgxDcapVerifier,
     };
 
     #[test]
@@ -34,7 +33,9 @@ pub mod tests {
         let evidence = attester.get_evidence(report_data)?;
         assert_eq!(evidence.get_tee_type(), TeeType::SgxDcap);
         let verifier = SgxDcapVerifier::new();
-        let claims = verifier.verify_evidence(&evidence, report_data)?;
+        assert_eq!(verifier.verify_evidence(&evidence, report_data), Ok(()));
+
+        let claims = evidence.get_claims()?;
         println!("generated claims:\n{:?}", claims);
 
         assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_QUOTE));

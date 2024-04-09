@@ -1,12 +1,9 @@
-pub mod claims;
-
 use std::{
     mem,
     time::{Duration, SystemTime},
 };
 
 use crate::errors::*;
-use crate::tee::claims::Claims;
 use crate::tee::sgx_dcap::evidence::SgxDcapEvidence;
 use crate::tee::GenericVerifier;
 
@@ -15,7 +12,6 @@ use sgx_dcap_quoteverify_rs::{
     sgx_ql_qv_result_t, sgx_ql_qv_supplemental_t, tee_get_supplemental_data_version_and_size,
     tee_qv_get_collateral, tee_supp_data_descriptor_t, tee_verify_quote,
 };
-use sgx_dcap_quoteverify_sys::sgx_quote3_t;
 
 #[derive(Debug, Default)]
 pub struct SgxDcapVerifier {}
@@ -29,36 +25,13 @@ impl SgxDcapVerifier {
 impl GenericVerifier for SgxDcapVerifier {
     type Evidence = SgxDcapEvidence;
 
-    fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<Claims> {
+    fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()> {
         /* Verify quote with intel sgx trsut chain */
-        ecdsa_quote_verification(&evidence.data)
+        ecdsa_quote_verification(evidence.as_quote_data())
             .context("Evidence's identity verification error.")?;
 
-        /* Parsing quote to get user-data and some fields */
-        if evidence.data.len() < std::mem::size_of::<sgx_quote3_t>() {
-            Err(Error::kind_with_msg(
-                ErrorKind::SgxDcapMulformedQuote,
-                format!(
-                    "evidence too short, evidence.data.len(): {}",
-                    evidence.data.len()
-                ),
-            ))?;
-        }
-
-        let quote = unsafe { &*(evidence.data.as_ptr() as *const sgx_quote3_t) };
-        let expected_quote_len =
-            std::mem::size_of::<sgx_quote3_t>() + quote.signature_data_len as usize;
-        if evidence.data.len() < expected_quote_len {
-            Err(Error::kind_with_msg(
-                ErrorKind::SgxDcapMulformedQuote,
-                format!(
-                    "evidence too short and probably got truncated, evidence.data.len(): {}, expected: {}",
-                    evidence.data.len(), expected_quote_len
-                ),
-            ))?;
-        }
-
         /* Check report data */
+        let quote = evidence.as_quote();
         let mut extended = sgx_dcap_quoteverify_sys::sgx_report_data_t::default();
         extended.d[..report_data.len()].clone_from_slice(report_data);
         if quote.report_body.report_data.d != extended.d {
@@ -68,8 +41,7 @@ impl GenericVerifier for SgxDcapVerifier {
             ))?;
         }
 
-        /* generate claims */
-        self::claims::gen_claims_from_quote(&quote)
+        Ok(())
     }
 }
 

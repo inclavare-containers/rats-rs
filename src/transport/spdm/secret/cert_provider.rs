@@ -9,7 +9,7 @@ pub struct RatsCertProvider {
 }
 
 impl RatsCertProvider {
-    pub fn new(cert_der: Vec<u8>) -> Self {
+    pub fn new_der(cert_der: Vec<u8>) -> Self {
         Self { cert_der }
     }
 }

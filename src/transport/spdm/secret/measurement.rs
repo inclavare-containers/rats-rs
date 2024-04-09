@@ -4,9 +4,13 @@
 
 #![allow(dead_code)]
 #![allow(unused_variables)]
+use crate::cert::dice::cbor::generate_claims_buffer;
+use crate::errors::*;
+use crate::tee::GenericEvidence;
 use codec::u24;
 use codec::Codec;
 use codec::Writer;
+use log::error;
 use spdmlib::config;
 use spdmlib::crypto::hash;
 use spdmlib::message::*;
@@ -17,10 +21,114 @@ use spdmlib::protocol::{
 };
 use spdmlib::secret::measurement::MeasurementProvider;
 
-/* @imlk: GET_MEASUREMENTS/MEASUREMENTS相关，提供measurement值的callback，以及生成measurement summary的callback */
-pub struct DummyMeasurementProvider {}
+pub const RATS_MEASUREMENT_BLOCK_INDEX: u8 = 0x01;
 
-impl MeasurementProvider for DummyMeasurementProvider {
+/// This struct is related to the `GET_MEASUREMENTS`/`MEASUREMENTS` SPDM messages. And it has implemented `MeasurementProvider` to provide a callback for generating measurement，and a callback for calculating measurement summary.
+pub(crate) struct RatsMeasurementProvider {
+    claims_buffer: Vec<u8>,
+}
+
+impl RatsMeasurementProvider {
+    pub fn new_from_evidence(evidence: &impl GenericEvidence) -> Result<Self> {
+        let claims = evidence.get_claims()?;
+        let claims_buffer = generate_claims_buffer(&claims)?;
+        Ok(Self { claims_buffer })
+    }
+}
+
+impl RatsMeasurementProvider {
+    fn create_rats_measurement_block(
+        &self,
+        measurement_hash_algo: SpdmMeasurementHashAlgo,
+    ) -> Result<SpdmMeasurementBlockStructure> {
+        let mut value = [0u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
+
+        if measurement_hash_algo == SpdmMeasurementHashAlgo::RAW_BIT_STREAM {
+            /* The representation of measurement is raw bit streams */
+            if self.claims_buffer.len() > value.len() {
+                todo!(
+                    "The claims_buffer is too long to fit in a measurement block: {} > {}",
+                    self.claims_buffer.len(),
+                    value.len()
+                );
+            }
+            let value_size = self.claims_buffer.len() as u16;
+            value[..value_size as usize].copy_from_slice(&self.claims_buffer);
+
+            Ok(SpdmMeasurementBlockStructure {
+                index: RATS_MEASUREMENT_BLOCK_INDEX,
+                measurement_specification: SpdmMeasurementSpecification::DMTF,
+                measurement_size: value_size + 3,
+                measurement: SpdmDmtfMeasurementStructure {
+                    r#type: SpdmDmtfMeasurementType::SpdmDmtfMeasurementManifest, /* Freeform measurement manifest */
+                    representation: SpdmDmtfMeasurementRepresentation::SpdmDmtfMeasurementRawBit,
+                    value_size,
+                    value,
+                },
+            })
+        } else {
+            /* The representation of measurement is digest */
+            let hash_algo = match measurement_hash_algo {
+                SpdmMeasurementHashAlgo::TPM_ALG_SHA_256 => SpdmBaseHashAlgo::TPM_ALG_SHA_256,
+                SpdmMeasurementHashAlgo::TPM_ALG_SHA_384 => SpdmBaseHashAlgo::TPM_ALG_SHA_384,
+                SpdmMeasurementHashAlgo::TPM_ALG_SHA_512 => SpdmBaseHashAlgo::TPM_ALG_SHA_512,
+                _ => {
+                    return Err(Error::kind_with_msg(
+                        ErrorKind::UnsupportedHashAlgo,
+                        format!("Unsupported measurement hash algo {measurement_hash_algo:?}"),
+                    ));
+                }
+            };
+
+            let digest =
+                hash::hash_all(hash_algo, &self.claims_buffer).ok_or(Error::kind_with_msg(
+                    ErrorKind::CalculateHashFailed,
+                    format!("The spdmlib failed to calculate hash with algo {hash_algo:?}"),
+                ))?;
+
+            let value_size = digest.data_size;
+            value[..value_size as usize].copy_from_slice(&digest.data[..value_size as usize]);
+
+            Ok(SpdmMeasurementBlockStructure {
+                index: RATS_MEASUREMENT_BLOCK_INDEX,
+                measurement_specification: SpdmMeasurementSpecification::DMTF,
+                measurement_size: value_size + 3,
+                measurement: SpdmDmtfMeasurementStructure {
+                    r#type: SpdmDmtfMeasurementType::SpdmDmtfMeasurementManifest, /* Freeform measurement manifest */
+                    representation: SpdmDmtfMeasurementRepresentation::SpdmDmtfMeasurementDigest,
+                    value_size,
+                    value,
+                },
+            })
+        }
+    }
+
+    fn create_rats_measurement_block_data(
+        &self,
+        measurement_hash_algo: SpdmMeasurementHashAlgo,
+    ) -> Result<(
+        [u8; config::MAX_SPDM_MEASUREMENT_RECORD_SIZE],
+        usize, /* length */
+    )> {
+        let block = self
+            .create_rats_measurement_block(measurement_hash_algo)
+            .context("Failed to create measurement block")?;
+
+        let mut measurement_record_data = [0u8; config::MAX_SPDM_MEASUREMENT_RECORD_SIZE];
+        let mut writer = Writer::init(&mut measurement_record_data);
+        block.encode(&mut writer).map_err(|e| {
+            Error::kind_with_msg(
+                ErrorKind::SpdmlibError,
+                format!("The spdmlib failed to encode measurement block to bytes: {e:?}"),
+            )
+        })?;
+        let length = writer.used();
+
+        Ok((measurement_record_data, length))
+    }
+}
+
+impl MeasurementProvider for RatsMeasurementProvider {
     fn measurement_collection(
         &self,
         spdm_version: SpdmVersion,
@@ -29,154 +137,39 @@ impl MeasurementProvider for DummyMeasurementProvider {
         measurement_index: usize,
     ) -> Option<SpdmMeasurementRecordStructure> {
         if measurement_specification != SpdmMeasurementSpecification::DMTF {
-            None
+            error!("Unsupported measurement specification: {measurement_specification:?}");
+            return None;
+        }
+
+        if measurement_index
+            == SpdmMeasurementOperation::SpdmMeasurementQueryTotalNumber.get_u8() as usize
+        {
+            /* Get number of measurements */
+            Some(SpdmMeasurementRecordStructure {
+                number_of_blocks: 1, /* We only have one measurement block */
+                ..Default::default()
+            })
+        } else if measurement_index
+            == SpdmMeasurementOperation::SpdmMeasurementRequestAll.get_u8() as usize /* Get all measurements */
+            || measurement_index == RATS_MEASUREMENT_BLOCK_INDEX as usize
+        /* Note that since we only have one measurement block so it is ok to merge two if branch here. */
+        {
+            /* Note: we call create_rats_measurement_block() here since we only have one measurement block */
+            let (measurement_record_data, measurement_record_length) = self
+                .create_rats_measurement_block_data(measurement_hash_algo)
+                .map_err(|e| {
+                    error!("Failed to create measurement block data: {e:?}");
+                    e
+                })
+                .ok()?;
+
+            Some(SpdmMeasurementRecordStructure {
+                number_of_blocks: 1, /* We only have one measurement block */
+                measurement_record_length: u24::new(measurement_record_length as u32),
+                measurement_record_data,
+            })
         } else {
-            let base_hash_algo = match measurement_hash_algo {
-                SpdmMeasurementHashAlgo::TPM_ALG_SHA_256 => SpdmBaseHashAlgo::TPM_ALG_SHA_256,
-                SpdmMeasurementHashAlgo::TPM_ALG_SHA_384 => SpdmBaseHashAlgo::TPM_ALG_SHA_384,
-                SpdmMeasurementHashAlgo::TPM_ALG_SHA_512 => SpdmBaseHashAlgo::TPM_ALG_SHA_512,
-                SpdmMeasurementHashAlgo::RAW_BIT_STREAM
-                | SpdmMeasurementHashAlgo::TPM_ALG_SHA3_256
-                | SpdmMeasurementHashAlgo::TPM_ALG_SHA3_384
-                | SpdmMeasurementHashAlgo::TPM_ALG_SHA3_512
-                | SpdmMeasurementHashAlgo::TPM_ALG_SM3 => return None,
-                _ => return None,
-            };
-            let hashsize = base_hash_algo.get_size();
-            if measurement_index
-                == SpdmMeasurementOperation::SpdmMeasurementQueryTotalNumber.get_u8() as usize
-            {
-                let mut dummy_spdm_measurement_record_structure =
-                    SpdmMeasurementRecordStructure::default();
-                dummy_spdm_measurement_record_structure.number_of_blocks = 10;
-                Some(dummy_spdm_measurement_record_structure)
-            } else if measurement_index
-                == SpdmMeasurementOperation::SpdmMeasurementRequestAll.get_u8() as usize
-            {
-                let mut firmware1: [u8; 8] = [0; 8];
-                let mut firmware2: [u8; 8] = [0; 8];
-                let mut firmware3: [u8; 8] = [0; 8];
-                let mut firmware4: [u8; 8] = [0; 8];
-                let mut firmware5: [u8; 8] = [0; 8];
-                let mut firmware6: [u8; 8] = [0; 8];
-                let mut firmware7: [u8; 8] = [0; 8];
-                let mut firmware8: [u8; 8] = [0; 8];
-                let mut firmware9: [u8; 8] = [0; 8];
-                let mut firmware10: [u8; 8] = [0; 8];
-                firmware1.copy_from_slice("deadbeef".as_bytes());
-                firmware2.copy_from_slice("eadbeefd".as_bytes());
-                firmware3.copy_from_slice("adbeefde".as_bytes());
-                firmware4.copy_from_slice("dbeefdea".as_bytes());
-                firmware5.copy_from_slice("beefdead".as_bytes());
-                firmware6.copy_from_slice("deadbeef".as_bytes());
-                firmware7.copy_from_slice("eadbeefd".as_bytes());
-                firmware8.copy_from_slice("adbeefde".as_bytes());
-                firmware9.copy_from_slice("dbeefdea".as_bytes());
-                firmware10.copy_from_slice("beefdead".as_bytes());
-                let digest1 = hash::hash_all(base_hash_algo, &firmware1).expect("hash_all failed!");
-                let digest2 = hash::hash_all(base_hash_algo, &firmware2).expect("hash_all failed!");
-                let digest3 = hash::hash_all(base_hash_algo, &firmware3).expect("hash_all failed!");
-                let digest4 = hash::hash_all(base_hash_algo, &firmware4).expect("hash_all failed!");
-                let digest5 = hash::hash_all(base_hash_algo, &firmware5).expect("hash_all failed!");
-                let digest6 = hash::hash_all(base_hash_algo, &firmware6).expect("hash_all failed!");
-                let digest7 = hash::hash_all(base_hash_algo, &firmware7).expect("hash_all failed!");
-                let digest8 = hash::hash_all(base_hash_algo, &firmware8).expect("hash_all failed!");
-                let digest9 = hash::hash_all(base_hash_algo, &firmware9).expect("hash_all failed!");
-                let digest10 =
-                    hash::hash_all(base_hash_algo, &firmware10).expect("hash_all failed!");
-                let mut digest_value1: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                let mut digest_value2: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                let mut digest_value3: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                let mut digest_value4: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                let mut digest_value5: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                let mut digest_value6: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                let mut digest_value7: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                let mut digest_value8: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                let mut digest_value9: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                let mut digest_value10: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                digest_value1[..64].copy_from_slice(digest1.data.as_ref());
-                digest_value2[..64].copy_from_slice(digest2.data.as_ref());
-                digest_value3[..64].copy_from_slice(digest3.data.as_ref());
-                digest_value4[..64].copy_from_slice(digest4.data.as_ref());
-                digest_value5[..64].copy_from_slice(digest5.data.as_ref());
-                digest_value6[..64].copy_from_slice(digest6.data.as_ref());
-                digest_value7[..64].copy_from_slice(digest7.data.as_ref());
-                digest_value8[..64].copy_from_slice(digest8.data.as_ref());
-                digest_value9[..64].copy_from_slice(digest9.data.as_ref());
-                digest_value10[..64].copy_from_slice(digest10.data.as_ref());
-
-                let mut spdm_measurement_block_structure = SpdmMeasurementBlockStructure {
-                    index: 1u8,
-                    measurement_specification,
-                    measurement_size: digest1.data_size + 3,
-                    measurement: SpdmDmtfMeasurementStructure {
-                        r#type: SpdmDmtfMeasurementType::SpdmDmtfMeasurementFirmware,
-                        representation:
-                            SpdmDmtfMeasurementRepresentation::SpdmDmtfMeasurementDigest,
-                        value_size: digest1.data_size,
-                        value: digest_value1,
-                    },
-                };
-
-                let mut measurement_record_data = [0u8; config::MAX_SPDM_MEASUREMENT_RECORD_SIZE];
-                let mut writer = Writer::init(&mut measurement_record_data);
-                for i in 0..10 {
-                    spdm_measurement_block_structure.encode(&mut writer).ok()?;
-                    spdm_measurement_block_structure.index += 1;
-                }
-
-                Some(SpdmMeasurementRecordStructure {
-                    number_of_blocks: 10,
-                    measurement_record_length: u24::new(writer.used() as u32),
-                    measurement_record_data,
-                })
-            } else if measurement_index > 10 {
-                None
-            } else {
-                let mut firmware: [u8; 8] = [0; 8];
-                firmware.copy_from_slice("deadbeef".as_bytes());
-
-                let digest = hash::hash_all(base_hash_algo, &firmware)?;
-
-                let mut digest_value: [u8; config::MAX_SPDM_MEASUREMENT_VALUE_LEN] =
-                    [0; config::MAX_SPDM_MEASUREMENT_VALUE_LEN];
-                digest_value[(measurement_index) * SPDM_MAX_HASH_SIZE
-                    ..(measurement_index + 1) * SPDM_MAX_HASH_SIZE]
-                    .copy_from_slice(digest.data.as_ref());
-
-                let spdm_measurement_block_structure = SpdmMeasurementBlockStructure {
-                    index: measurement_index as u8,
-                    measurement_specification,
-                    measurement_size: digest.data_size + 3,
-                    measurement: SpdmDmtfMeasurementStructure {
-                        r#type: SpdmDmtfMeasurementType::SpdmDmtfMeasurementFirmware,
-                        representation:
-                            SpdmDmtfMeasurementRepresentation::SpdmDmtfMeasurementDigest,
-                        value_size: digest.data_size,
-                        value: digest_value,
-                    },
-                };
-
-                let mut measurement_record_data = [0u8; config::MAX_SPDM_MEASUREMENT_RECORD_SIZE];
-                let mut writer = Writer::init(&mut measurement_record_data);
-                spdm_measurement_block_structure.encode(&mut writer).ok()?;
-
-                Some(SpdmMeasurementRecordStructure {
-                    number_of_blocks: 1,
-                    measurement_record_length: u24::new(writer.used() as u32),
-                    measurement_record_data,
-                })
-            }
+            None
         }
     }
 
@@ -189,16 +182,21 @@ impl MeasurementProvider for DummyMeasurementProvider {
         measurement_summary_hash_type: SpdmMeasurementSummaryHashType,
     ) -> Option<SpdmDigestStruct> {
         match measurement_summary_hash_type {
-            SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeAll => {
-                let mut dummyall: [u8; 8] = [0; 8];
-                dummyall.copy_from_slice("dummyall".as_bytes());
-                let digest = hash::hash_all(base_hash_algo, &dummyall)?;
-                Some(digest)
-            }
-            SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeTcb => {
-                let mut dummytcb: [u8; 8] = [0; 8];
-                dummytcb.copy_from_slice("dummytcb".as_bytes());
-                let digest = hash::hash_all(base_hash_algo, &dummytcb)?;
+            SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeAll
+            | SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeTcb => {
+                /* Note: we call create_rats_measurement_block() here since we only have one measurement block */
+                let (measurement_record_data, measurement_record_length) = self
+                    .create_rats_measurement_block_data(measurement_hash_algo)
+                    .map_err(|e| {
+                        error!("Failed to create measurement block data: {e:?}");
+                        e
+                    })
+                    .ok()?;
+
+                let digest = hash::hash_all(
+                    base_hash_algo,
+                    &measurement_record_data[..measurement_record_length],
+                )?;
                 Some(digest)
             }
             SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeNone => None,
@@ -207,47 +205,27 @@ impl MeasurementProvider for DummyMeasurementProvider {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::DummyMeasurementProvider;
-    use codec::Codec;
-    use spdmlib::{
-        protocol::{
-            SpdmMeasurementBlockStructure, SpdmMeasurementHashAlgo, SpdmMeasurementSpecification,
-            SpdmVersion, SHA512_DIGEST_SIZE,
-        },
-        secret::measurement::MeasurementProvider,
-    };
+pub(crate) struct EmptyMeasurementProvider {}
 
-    #[test]
-    fn test_case0_measurement_collection() {
-        let measurement_provider = DummyMeasurementProvider {};
+impl MeasurementProvider for EmptyMeasurementProvider {
+    fn measurement_collection(
+        &self,
+        spdm_version: SpdmVersion,
+        measurement_specification: SpdmMeasurementSpecification,
+        measurement_hash_algo: SpdmMeasurementHashAlgo,
+        measurement_index: usize,
+    ) -> Option<SpdmMeasurementRecordStructure> {
+        None
+    }
 
-        let records = measurement_provider.measurement_collection(
-            SpdmVersion::SpdmVersion11,
-            SpdmMeasurementSpecification::DMTF,
-            SpdmMeasurementHashAlgo::TPM_ALG_SHA_512,
-            1,
-        );
-        let deadbeefsha512 = [
-            17, 58, 59, 199, 131, 216, 81, 252, 3, 115, 33, 75, 25, 234, 123, 233, 250, 61, 229,
-            65, 236, 185, 254, 2, 109, 82, 198, 3, 232, 234, 25, 193, 116, 204, 14, 151, 5, 248,
-            185, 13, 49, 34, 18, 192, 195, 166, 216, 69, 61, 223, 179, 227, 20, 20, 9, 207, 75,
-            237, 200, 239, 3, 53, 144, 180,
-        ];
-
-        match records {
-            Some(v) => {
-                let spdm_measurement_block_structure =
-                    SpdmMeasurementBlockStructure::read_bytes(&v.measurement_record_data).unwrap();
-                assert_eq!(
-                    deadbeefsha512,
-                    &spdm_measurement_block_structure.measurement.value[0..SHA512_DIGEST_SIZE]
-                );
-            }
-            None => {
-                assert!(false)
-            }
-        }
+    fn generate_measurement_summary_hash(
+        &self,
+        spdm_version: SpdmVersion,
+        base_hash_algo: SpdmBaseHashAlgo,
+        measurement_specification: SpdmMeasurementSpecification,
+        measurement_hash_algo: SpdmMeasurementHashAlgo,
+        measurement_summary_hash_type: SpdmMeasurementSummaryHashType,
+    ) -> Option<SpdmDigestStruct> {
+        None
     }
 }

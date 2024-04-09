@@ -24,6 +24,8 @@ pub enum ErrorKind {
 
     UnsupportedHashAlgo,
 
+    CalculateHashFailed,
+
     GenCertError,
 
     ParseCertError,
@@ -48,10 +50,12 @@ pub enum ErrorKind {
 
     SpdmBrokenSession,
 
+    SpdmlibError,
+
     Unknown,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Error {
     kind: ErrorKind,
     msg: Option<String>,

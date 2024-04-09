@@ -46,7 +46,6 @@ pub fn gen_claims_from_quote(quote: &sgx_quote3_t) -> Result<Claims> {
     );
 
     /* sgx claims */
-
     macro_rules! as_slice {
         ($value: expr) => {
             unsafe {
