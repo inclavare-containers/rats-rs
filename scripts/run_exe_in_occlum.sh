@@ -70,6 +70,21 @@ if [ -n "$RATS_RS_LOG_LEVEL" ]; then
           echo "${new_json}" > Occlum.json
 fi
 
+# if $LLVM_PROFILE_FILE is set, pass it to occlum instance
+if [ -n "$LLVM_PROFILE_FILE" ]; then
+  new_json="$(jq '.env.default += ["LLVM_PROFILE_FILE='$LLVM_PROFILE_FILE'"]' Occlum.json)" && \
+          echo "${new_json}" > Occlum.json
+  mkdir -p image/coverage
+  new_json="$(jq '.mount += [
+              {
+                  "target": "/coverage",
+                  "type": "hostfs",
+                  "source": "'$COVERAGE_DIR'"
+              }
+            ]' Occlum.json)" && \
+          echo "${new_json}" > Occlum.json
+fi
+
 occlum build
 
 cd "$dir"
