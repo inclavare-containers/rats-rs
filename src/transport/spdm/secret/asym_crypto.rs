@@ -128,7 +128,6 @@ pub mod tests {
         RSAPSS_3072_KEY_SIZE, RSAPSS_4096_KEY_SIZE, RSASSA_2048_KEY_SIZE, RSASSA_3072_KEY_SIZE,
         RSASSA_4096_KEY_SIZE, SPDM_MAX_ASYM_KEY_SIZE,
     };
-    use std::path::PathBuf;
 
     pub struct DummySecretAsymSigner {}
 
@@ -232,17 +231,13 @@ pub mod tests {
         // or  openssl.exe ecparam -name prime256v1 -genkey -out private.der -outform der
         // openssl.exe pkcs8 -in private.der -inform DER -topk8 -nocrypt -outform DER > private.p8
 
-        let crate_dir = get_test_key_directory();
-        println!("crate dir: {:?}", crate_dir.as_os_str().to_str());
-        let key_file_path = if algorithm == &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING {
-            crate_dir.join("deps/spdm-rs/test_key/ecp256/end_responder.key.p8")
+        let key_bytes = if algorithm == &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING {
+            &include_bytes!("../../../../deps/spdm-rs/test_key/ecp256/end_responder.key.p8")[..]
         } else if algorithm == &ring::signature::ECDSA_P384_SHA384_FIXED_SIGNING {
-            crate_dir.join("deps/spdm-rs/test_key/ecp384/end_responder.key.p8")
+            &include_bytes!("../../../../deps/spdm-rs/test_key/ecp384/end_responder.key.p8")[..]
         } else {
             panic!("not support")
         };
-        let der_file = std::fs::read(key_file_path).expect("unable to read key der!");
-        let key_bytes = der_file.as_slice();
         let rng = ring::rand::SystemRandom::new();
         let key_pair: ring::signature::EcdsaKeyPair =
             ring::signature::EcdsaKeyPair::from_pkcs8(algorithm, key_bytes, &rng).ok()?;
@@ -267,25 +262,22 @@ pub mod tests {
         data: &[u8],
     ) -> Option<SpdmSignatureStruct> {
         // openssl.exe genpkey -algorithm rsa -pkeyopt rsa_keygen_bits:2048 -pkeyopt rsa_keygen_pubexp:65537 -outform DER > private.der
-        let crate_dir = get_test_key_directory();
 
         #[allow(unreachable_patterns)]
-        let key_file_path = match key_len {
+        let key_bytes = match key_len {
             RSASSA_2048_KEY_SIZE | RSAPSS_2048_KEY_SIZE => {
-                crate_dir.join("deps/spdm-rs/test_key/rsa2048/end_responder.key.der")
+                &include_bytes!("../../../../deps/spdm-rs/test_key/rsa2048/end_responder.key.der")[..]
             }
             RSASSA_3072_KEY_SIZE | RSAPSS_3072_KEY_SIZE => {
-                crate_dir.join("deps/spdm-rs/test_key/rsa3072/end_responder.key.der")
+                &include_bytes!("../../../../deps/spdm-rs/test_key/rsa3072/end_responder.key.der")[..]
             }
             RSASSA_4096_KEY_SIZE | RSAPSS_4096_KEY_SIZE => {
-                crate_dir.join("deps/spdm-rs/test_key/rsa3072/end_responder.key.der")
+                &include_bytes!("../../../../deps/spdm-rs/test_key/rsa3072/end_responder.key.der")[..]
             }
             _ => {
                 panic!("RSA key len not supported")
             }
         };
-        let der_file = std::fs::read(key_file_path).expect("unable to read key der!");
-        let key_bytes = der_file.as_slice();
 
         let key_pair: ring::signature::RsaKeyPair =
             ring::signature::RsaKeyPair::from_der(key_bytes).ok()?;
@@ -305,9 +297,5 @@ pub mod tests {
             data_size: key_len as u16,
             data: full_sign,
         })
-    }
-
-    fn get_test_key_directory() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
     }
 }

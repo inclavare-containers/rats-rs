@@ -79,12 +79,11 @@ pub mod tests {
                 ..Default::default()
             };
 
-            let ca_file_path = if self.use_ecdsa {
-                "deps/spdm-rs/test_key/ecp384/ca.cert.der"
+            let ca_cert = if self.use_ecdsa {
+                &include_bytes!("../../../../deps/spdm-rs/test_key/ecp384/ca.cert.der")[..]
             } else {
-                "deps/spdm-rs/test_key/rsa3072/ca.cert.der"
+                &include_bytes!("../../../../deps/spdm-rs/test_key/rsa3072/ca.cert.der")[..]
             };
-            let ca_cert = std::fs::read(ca_file_path).expect("unable to read ca cert!");
             let ca_len = ca_cert.len();
             peer_root_cert_data.data_size = (ca_len) as u16;
             peer_root_cert_data.data[0..ca_len].copy_from_slice(ca_cert.as_ref());
