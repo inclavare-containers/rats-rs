@@ -83,8 +83,10 @@ impl SpdmRequesterBuilder {
             (
                 Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
                     as Box<dyn CertProvider>,
-                Box::new(RatsSecretAsymSigner::new(cert_bundle.private_key().clone()))
-                    as Box<dyn SecretAsymSigner + Send + Sync>,
+                Box::new(RatsSecretAsymSigner::new(
+                    cert_bundle.private_key().clone(),
+                    HashAlgo::Sha256,
+                )) as Box<dyn SecretAsymSigner + Send + Sync>,
                 Box::new(RatsMeasurementProvider::new_from_evidence(
                     cert_bundle.evidence(),
                 )?) as Box<dyn MeasurementProvider + Send + Sync>,
@@ -121,6 +123,7 @@ impl SpdmRequesterBuilder {
             asym_signer,
             cert_validation_strategy,
             measurement_provider,
+            SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeAll,
         ))
     }
 }
@@ -128,6 +131,7 @@ impl SpdmRequesterBuilder {
 pub struct SpdmRequester {
     context: requester::RequesterContext,
     session_id: Option<u32>,
+    requested_measurement_summary_hash_type: SpdmMeasurementSummaryHashType,
 }
 
 impl SpdmRequester {
@@ -138,6 +142,7 @@ impl SpdmRequester {
         asym_signer: Box<dyn SecretAsymSigner + Send + Sync>,
         cert_validation_strategy: Box<dyn CertValidationStrategy + Send + Sync>,
         measurement_provider: Box<dyn MeasurementProvider + Send + Sync>,
+        requested_measurement_summary_hash_type: SpdmMeasurementSummaryHashType,
     ) -> Self
     where
         S: Read + Write + Send + Sync + 'static,
@@ -202,6 +207,7 @@ impl SpdmRequester {
         Self {
             context,
             session_id: None,
+            requested_measurement_summary_hash_type,
         }
     }
 }
@@ -229,10 +235,7 @@ impl GenericSecureTransPort for SpdmRequester {
             .context("send_receive_spdm_certificate failed")?;
 
         self.context
-            .send_receive_spdm_challenge(
-                0,
-                SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeNone,
-            )
+            .send_receive_spdm_challenge(0, self.requested_measurement_summary_hash_type)
             .await
             .kind(ErrorKind::SpdmNegotiate)
             .context("send_receive_spdm_challenge failed")?;
@@ -297,11 +300,7 @@ impl GenericSecureTransPort for SpdmRequester {
 
         let session_id = self
             .context
-            .start_session(
-                false,
-                0,
-                SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeNone,
-            )
+            .start_session(false, 0, self.requested_measurement_summary_hash_type)
             .await
             .kind(ErrorKind::SpdmNegotiate)
             .context("failed to setup session")?;
@@ -383,7 +382,13 @@ pub mod tests {
     use std::net::TcpStream;
 
     #[maybe_async::maybe_async]
-    pub async fn run_requester(test_dummy: bool, stream: TcpStream) -> Result<()> {
+    pub async fn run_requester(
+        test_dummy: bool,
+        stream: TcpStream,
+        hash_algo: HashAlgo,
+        asym_algo: AsymmetricAlgo,
+        requested_measurement_summary_hash_type: SpdmMeasurementSummaryHashType,
+    ) -> Result<()> {
         let (cert_provider, asym_signer, measurement_provider, cert_validation_strategy) =
             if cfg!(feature = "mut-auth") {
                 if test_dummy {
@@ -398,13 +403,14 @@ pub mod tests {
                     )
                 } else {
                     let attester = AutoAttester::new();
-                    let cert_bundle =
-                        CertBuilder::new(attester, HashAlgo::Sha256).build(AsymmetricAlgo::P256)?;
+                    let cert_bundle = CertBuilder::new(attester, hash_algo).build(asym_algo)?;
                     (
                         Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
                             as Box<dyn CertProvider>,
-                        Box::new(RatsSecretAsymSigner::new(cert_bundle.private_key().clone()))
-                            as Box<dyn SecretAsymSigner + Send + Sync>,
+                        Box::new(RatsSecretAsymSigner::new(
+                            cert_bundle.private_key().clone(),
+                            hash_algo,
+                        )) as Box<dyn SecretAsymSigner + Send + Sync>,
                         Box::new(RatsMeasurementProvider::new_from_evidence(
                             cert_bundle.evidence(),
                         )?) as Box<dyn MeasurementProvider + Send + Sync>,
@@ -442,6 +448,7 @@ pub mod tests {
             asym_signer,
             cert_validation_strategy,
             measurement_provider,
+            requested_measurement_summary_hash_type,
         );
         requester.negotiate().await?;
 

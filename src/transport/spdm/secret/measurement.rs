@@ -254,13 +254,7 @@ impl MeasurementProvider for EmptyMeasurementProvider {
         match measurement_summary_hash_type {
             SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeAll
             | SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeTcb => {
-                let measurement_record_data = [0u8; config::MAX_SPDM_MEASUREMENT_RECORD_SIZE];
-                let measurement_record_length = 0;
-                let digest = hash::hash_all(
-                    base_hash_algo,
-                    &measurement_record_data[..measurement_record_length],
-                )?;
-                Some(digest)
+                Some(hash::hash_all(base_hash_algo, &[])?)
             }
             SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeNone => None,
             _ => None,

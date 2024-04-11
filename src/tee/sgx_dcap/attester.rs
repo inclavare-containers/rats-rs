@@ -6,7 +6,6 @@ use crate::errors::*;
 use crate::tee::GenericAttester;
 use occlum_dcap::{sgx_report_data_t, DcapQuote};
 
-#[derive(Debug, Default)]
 pub struct SgxDcapAttester {}
 
 impl SgxDcapAttester {

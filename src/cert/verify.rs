@@ -126,35 +126,6 @@ fn verify_signed_data(
                 .verify(signed_data, &signature.try_into()?)?;
         }
 
-        const_oid::db::rfc5912::ID_RSASSA_PSS => {
-            let params = algo
-                .parameters
-                .as_ref()
-                .ok_or("empty PSS parameters")?
-                .decode_as::<rsa::pkcs1::RsaPssParams>()?;
-
-            match params.hash.oid {
-                const_oid::db::rfc5912::ID_SHA_256 => {
-                    rsa::pss::VerifyingKey::<sha2::Sha256>::new(rsa::RsaPublicKey::try_from(spki)?)
-                        .verify(signed_data, &signature.try_into()?)?
-                }
-                const_oid::db::rfc5912::ID_SHA_384 => {
-                    rsa::pss::VerifyingKey::<sha2::Sha384>::new(rsa::RsaPublicKey::try_from(spki)?)
-                        .verify(signed_data, &signature.try_into()?)?
-                }
-                const_oid::db::rfc5912::ID_SHA_512 => {
-                    rsa::pss::VerifyingKey::<sha2::Sha512>::new(rsa::RsaPublicKey::try_from(spki)?)
-                        .verify(signed_data, &signature.try_into()?)?
-                }
-                _ => {
-                    return Err(Error::kind_with_msg(
-                        ErrorKind::UnsupportedHashAlgo,
-                        format!("unsupported PSS hash algo {}", params.hash.oid),
-                    ))
-                }
-            }
-        }
-
         const_oid::db::rfc5912::ECDSA_WITH_SHA_256 => {
             let signature = p256::ecdsa::DerSignature::try_from(signature)?;
             p256::ecdsa::VerifyingKey::try_from(spki)?.verify(signed_data, &signature)?;

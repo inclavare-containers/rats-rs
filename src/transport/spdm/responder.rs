@@ -74,8 +74,10 @@ impl SpdmResponderBuilder {
             (
                 Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
                     as Box<dyn CertProvider>,
-                Box::new(RatsSecretAsymSigner::new(cert_bundle.private_key().clone()))
-                    as Box<dyn SecretAsymSigner + Send + Sync>,
+                Box::new(RatsSecretAsymSigner::new(
+                    cert_bundle.private_key().clone(),
+                    HashAlgo::Sha256,
+                )) as Box<dyn SecretAsymSigner + Send + Sync>,
                 Box::new(RatsMeasurementProvider::new_from_evidence(
                     cert_bundle.evidence(),
                 )?) as Box<dyn MeasurementProvider + Send + Sync>,
@@ -377,12 +379,14 @@ impl GenericSecureTransPort for SpdmResonder {
 #[cfg(test)]
 pub mod tests {
 
+    use itertools::iproduct;
+    use log::LevelFilter;
     use spdmlib::crypto::cert_operation::DefaultCertValidationStrategy;
 
     use crate::{
         cert::CertBuilder,
         crypto::{AsymmetricAlgo, HashAlgo},
-        tee::AutoAttester,
+        tee::{AutoAttester, TeeType},
         transport::spdm::secret::{
             asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
             cert_provider::{tests::DummyCertProvider, RatsCertProvider},
@@ -398,7 +402,12 @@ pub mod tests {
     use std::net::{TcpListener, TcpStream};
 
     #[maybe_async::maybe_async]
-    pub async fn run_responder(test_dummy: bool, stream: TcpStream) -> Result<()> {
+    pub async fn run_responder(
+        test_dummy: bool,
+        stream: TcpStream,
+        hash_algo: HashAlgo,
+        asym_algo: AsymmetricAlgo,
+    ) -> Result<()> {
         let (cert_provider, asym_signer, measurement_provider, cert_validation_strategy) =
             if test_dummy {
                 (
@@ -411,13 +420,14 @@ pub mod tests {
                 )
             } else {
                 let attester = AutoAttester::new();
-                let cert_bundle =
-                    CertBuilder::new(attester, HashAlgo::Sha256).build(AsymmetricAlgo::P256)?;
+                let cert_bundle = CertBuilder::new(attester, hash_algo).build(asym_algo)?;
                 (
                     Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
                         as Box<dyn CertProvider>,
-                    Box::new(RatsSecretAsymSigner::new(cert_bundle.private_key().clone()))
-                        as Box<dyn SecretAsymSigner + Send + Sync>,
+                    Box::new(RatsSecretAsymSigner::new(
+                        cert_bundle.private_key().clone(),
+                        hash_algo,
+                    )) as Box<dyn SecretAsymSigner + Send + Sync>,
                     Box::new(RatsMeasurementProvider::new_from_evidence(
                         cert_bundle.evidence(),
                     )?) as Box<dyn MeasurementProvider + Send + Sync>,
@@ -465,53 +475,111 @@ pub mod tests {
 
     #[test]
     fn test_spdm_over_tcp() -> Result<()> {
-        let test_dummy = true; /* set this to `false` for testing with dice cert */
+        let _ = env_logger::builder()
+            .is_test(true)
+            .filter_level(LevelFilter::Trace)
+            .try_init();
 
-        let requester_func = move || {
-            let stream =
-                TcpStream::connect("127.0.0.1:2323").expect("Couldn't connect to the server...");
+        let test_dummy = match TeeType::detect_env() {
+            Some(_) => false, /* Testing with dice cert */
+            None => true,
+        };
 
-            #[cfg(not(feature = "is_sync"))]
-            {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(Box::pin(run_requester(test_dummy, stream)))
+        for (requested_measurement_summary_hash_type, hash_algo, asym_algo) in [
+            (
+                SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeAll,
+                HashAlgo::Sha256,
+                AsymmetricAlgo::Rsa2048,
+            ),
+            (
+                SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeAll,
+                HashAlgo::Sha384,
+                AsymmetricAlgo::Rsa3072,
+            ),
+            (
+                SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeAll,
+                HashAlgo::Sha512,
+                AsymmetricAlgo::Rsa4096,
+            ),
+            (
+                SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeAll,
+                HashAlgo::Sha256,
+                AsymmetricAlgo::P256,
+            ),
+            (
+                SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeTcb,
+                HashAlgo::Sha256,
+                AsymmetricAlgo::P256,
+            ),
+            (
+                SpdmMeasurementSummaryHashType::SpdmMeasurementSummaryHashTypeNone,
+                HashAlgo::Sha256,
+                AsymmetricAlgo::P256,
+            ),
+        ] {
+            // for (hash_algo, asym_algo) in [(HashAlgo::Sha256, AsymmetricAlgo::Rsa3072)] {
+            println!("test hash_algo({hash_algo:?}) + asym_algo({asym_algo:?})");
+            let requester_func = move || {
+                let stream = TcpStream::connect("127.0.0.1:2323")
+                    .expect("Couldn't connect to the server...");
+
+                #[cfg(not(feature = "is_sync"))]
+                {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(Box::pin(run_requester(
+                        test_dummy,
+                        stream,
+                        hash_algo,
+                        asym_algo,
+                        requested_measurement_summary_hash_type,
+                    )))
                     .unwrap();
-            }
+                }
 
-            #[cfg(feature = "is_sync")]
-            {
-                run_requester(test_dummy, stream).unwrap();
-            }
-        };
+                #[cfg(feature = "is_sync")]
+                {
+                    run_requester(
+                        test_dummy,
+                        stream,
+                        hash_algo,
+                        asym_algo,
+                        requested_measurement_summary_hash_type,
+                    )
+                    .unwrap();
+                }
+            };
 
-        let responder_func = move || {
-            let listener =
-                TcpListener::bind("127.0.0.1:2323").expect("Couldn't bind to the server");
-            println!("server start!");
+            let responder_func = move || {
+                let listener =
+                    TcpListener::bind("127.0.0.1:2323").expect("Couldn't bind to the server");
+                println!("server start!");
 
-            let t2 = std::thread::spawn(requester_func);
+                let t2 = std::thread::spawn(requester_func);
 
-            println!("waiting for next connection!");
-            let (stream, _) = listener.accept().expect("Read stream error!");
-            println!("new connection!");
+                println!("waiting for next connection!");
+                let (stream, _) = listener.accept().expect("Read stream error!");
+                println!("new connection!");
 
-            #[cfg(not(feature = "is_sync"))]
-            {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(run_responder(test_dummy, stream)).unwrap();
-            }
+                #[cfg(not(feature = "is_sync"))]
+                {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(run_responder(test_dummy, stream, hash_algo, asym_algo))
+                        .unwrap();
+                }
 
-            #[cfg(feature = "is_sync")]
-            {
-                run_responder(test_dummy, stream).unwrap();
-            }
+                #[cfg(feature = "is_sync")]
+                {
+                    run_responder(test_dummy, stream, hash_algo, asym_algo).unwrap();
+                }
 
-            t2.join().unwrap();
-        };
+                t2.join().unwrap();
+            };
 
-        let t1 = std::thread::spawn(responder_func);
+            let t1 = std::thread::spawn(responder_func);
 
-        t1.join().unwrap();
+            t1.join().unwrap();
+        }
+
         Ok(())
     }
 }

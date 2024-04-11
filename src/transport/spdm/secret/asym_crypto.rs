@@ -8,35 +8,46 @@ use spdmlib::secret::asym_sign::SecretAsymSigner;
 
 use spdmlib::protocol::{SpdmBaseAsymAlgo, SpdmBaseHashAlgo, SpdmSignatureStruct};
 
-use crate::crypto::AsymmetricPrivateKey;
+use crate::crypto::{AsymmetricPrivateKey, HashAlgo};
 
 pub struct RatsSecretAsymSigner {
     private_key: AsymmetricPrivateKey,
+    base_hash_algo: SpdmBaseHashAlgo,
 }
 
 impl RatsSecretAsymSigner {
-    pub fn new(private_key: AsymmetricPrivateKey) -> Self {
-        Self { private_key }
+    pub fn new(private_key: AsymmetricPrivateKey, hash_algo: HashAlgo) -> Self {
+        let base_hash_algo = match hash_algo {
+            HashAlgo::Sha256 => SpdmBaseHashAlgo::TPM_ALG_SHA_256,
+            HashAlgo::Sha384 => SpdmBaseHashAlgo::TPM_ALG_SHA_384,
+            HashAlgo::Sha512 => SpdmBaseHashAlgo::TPM_ALG_SHA_512,
+        };
+        Self {
+            private_key,
+            base_hash_algo,
+        }
     }
 }
 
 impl SecretAsymSigner for RatsSecretAsymSigner {
     fn supported_algo(&self) -> (SpdmBaseHashAlgo, SpdmBaseAsymAlgo) {
-        (
-            SpdmBaseHashAlgo::TPM_ALG_SHA_256, // TODO: enable support for sha384 and sha512
-            match &self.private_key {
-                AsymmetricPrivateKey::Rsa2048(_) => {
-                    SpdmBaseAsymAlgo::TPM_ALG_RSASSA_2048 | SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_2048
-                }
-                AsymmetricPrivateKey::Rsa3072(_) => {
-                    SpdmBaseAsymAlgo::TPM_ALG_RSASSA_3072 | SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_3072
-                }
-                AsymmetricPrivateKey::Rsa4096(_) => {
-                    SpdmBaseAsymAlgo::TPM_ALG_RSASSA_4096 | SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_4096
-                }
-                AsymmetricPrivateKey::P256(_) => SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P256,
-            },
-        )
+        // TODO: enable support for sha384 and sha512
+        match &self.private_key {
+            AsymmetricPrivateKey::Rsa2048(_) => {
+                /* Note in rats-rs we always use RSASSA-PKCS1-v1_5 instead of RSASSA-PSS since spdm-rs cannot handle RSASSA-PSS correctly. */
+                (self.base_hash_algo, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_2048)
+            }
+            AsymmetricPrivateKey::Rsa3072(_) => {
+                (self.base_hash_algo, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_3072)
+            }
+            AsymmetricPrivateKey::Rsa4096(_) => {
+                (self.base_hash_algo, SpdmBaseAsymAlgo::TPM_ALG_RSASSA_4096)
+            }
+            AsymmetricPrivateKey::P256(_) => (
+                self.base_hash_algo,
+                SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P256,
+            ),
+        }
     }
 
     fn sign(

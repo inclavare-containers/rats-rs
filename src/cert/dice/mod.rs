@@ -1,5 +1,5 @@
-pub mod extensions;
 pub mod cbor;
+pub mod extensions;
 
 use self::extensions::{DiceEndorsementExtension, DiceEvidenceExtension};
 use crate::crypto::{AsymmetricPrivateKey, HashAlgo};
@@ -42,7 +42,6 @@ pub(crate) fn generate_and_sign_dice_cert(
     .kind(ErrorKind::GenCertError)
     .context("failed to create SubjectPublicKeyInfo")?;
 
-    #[macro_export]
     macro_rules! build_with_signer {
         ($signer:expr) => {
             build_with_signer!($signer, _)
