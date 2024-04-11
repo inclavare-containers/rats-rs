@@ -15,10 +15,6 @@ use spdmlib::config;
 use spdmlib::crypto::hash;
 use spdmlib::message::*;
 use spdmlib::protocol::*;
-use spdmlib::protocol::{
-    SpdmBaseHashAlgo, SpdmDigestStruct, SpdmMeasurementRecordStructure,
-    SpdmMeasurementSpecification, SpdmMeasurementSummaryHashType,
-};
 use spdmlib::secret::measurement::MeasurementProvider;
 
 pub const RATS_MEASUREMENT_BLOCK_INDEX: u8 = 0x01;

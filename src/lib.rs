@@ -1,5 +1,8 @@
 #![feature(specialization)]
+#![feature(trait_upcasting)]
 #![allow(incomplete_features)]
+// To suppress warning messages appearing in recent nightly rust. See https://github.com/rust-lang/rust/issues/121315
+#![allow(unused_imports)]
 
 mod cert;
 mod crypto;

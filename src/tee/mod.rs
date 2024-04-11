@@ -157,7 +157,7 @@ impl GenericVerifier for AutoVerifier {
         report_data: &[u8],
     ) -> Result<()> {
         let tee_type = evidence.0.get_tee_type();
-        let evidence = evidence.0.as_ref()as &dyn Any;
+        let evidence = evidence.0.as_ref() as &dyn Any;
         match tee_type {
             #[cfg(feature = "verifier-sgx-dcap")]
             TeeType::SgxDcap => {

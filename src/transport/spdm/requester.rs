@@ -24,7 +24,6 @@ use crate::transport::GenericSecureTransPort;
 use crate::CertBuilder;
 use codec::{Codec, Reader};
 use common::SpdmTransportEncap;
-use core::convert::TryFrom;
 use log::debug;
 use maybe_async::maybe_async;
 use spdmlib::common;

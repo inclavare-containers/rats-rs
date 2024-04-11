@@ -11,7 +11,6 @@ use super::secret::measurement::{EmptyMeasurementProvider, RatsMeasurementProvid
 use super::VerifyMode;
 use codec::Codec;
 use common::SpdmTransportEncap;
-use core::convert::TryFrom;
 use maybe_async::maybe_async;
 use spdmlib::common::session::SpdmSessionState;
 use spdmlib::common::{SecuredMessageVersion, SpdmOpaqueSupport};
