@@ -69,12 +69,12 @@ impl SecretAsymSigner for RatsSecretAsymSigner {
                             .to_bytes()
                     }
                     SpdmBaseHashAlgo::TPM_ALG_SHA_384 => {
-                        rsa::pss::SigningKey::<sha2::Sha256>::new(key.clone())
+                        rsa::pss::SigningKey::<sha2::Sha384>::new(key.clone())
                             .sign_with_rng(&mut rand::thread_rng(), data)
                             .to_bytes()
                     }
                     SpdmBaseHashAlgo::TPM_ALG_SHA_512 => {
-                        rsa::pss::SigningKey::<sha2::Sha256>::new(key.clone())
+                        rsa::pss::SigningKey::<sha2::Sha512>::new(key.clone())
                             .sign_with_rng(&mut rand::thread_rng(), data)
                             .to_bytes()
                     }
@@ -91,12 +91,12 @@ impl SecretAsymSigner for RatsSecretAsymSigner {
                             .to_bytes()
                     }
                     SpdmBaseHashAlgo::TPM_ALG_SHA_384 => {
-                        rsa::pkcs1v15::SigningKey::<sha2::Sha256>::new(key.clone())
+                        rsa::pkcs1v15::SigningKey::<sha2::Sha384>::new(key.clone())
                             .sign_with_rng(&mut rand::thread_rng(), data)
                             .to_bytes()
                     }
                     SpdmBaseHashAlgo::TPM_ALG_SHA_512 => {
-                        rsa::pkcs1v15::SigningKey::<sha2::Sha256>::new(key.clone())
+                        rsa::pkcs1v15::SigningKey::<sha2::Sha512>::new(key.clone())
                             .sign_with_rng(&mut rand::thread_rng(), data)
                             .to_bytes()
                     }
