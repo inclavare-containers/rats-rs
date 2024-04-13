@@ -70,7 +70,7 @@ TODO: CI/CD
 1. 在Occlum中运行server端
 
     ```sh
-    just run-in-occlum server --attest-self --listen-on-tcp 127.0.0.1:8080
+    just run-in-occlum echo-server --attest-self --listen-on-tcp 127.0.0.1:8080
     ```
 > [!IMPORTANT]  
 > `--attest-self`选项指定服务端需要作为attester向对端证明自己的身份，指定该选项时必须在某种TEE环境中运行。
@@ -81,12 +81,12 @@ TODO: CI/CD
 
     例如，运行在非TEE环境：
     ```sh
-    just run-in-host client --verify-peer --connect-to-tcp 127.0.0.1:8080
+    just run-in-host echo-client --verify-peer --connect-to-tcp 127.0.0.1:8080
     ```
 
     或者，运行在非TEE环境：
     ```sh
-    just run-in-occlum client --verify-peer --connect-to-tcp 127.0.0.1:8080
+    just run-in-occlum echo-client --verify-peer --connect-to-tcp 127.0.0.1:8080
     ```
 
 > [!NOTE]

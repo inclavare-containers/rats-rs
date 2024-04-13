@@ -9,6 +9,7 @@ use spin::Mutex;
 
 use alloc::sync::Arc;
 use core::ops::DerefMut;
+use std::any::Any;
 use std::io::{Read, Write};
 
 const FRAME_HEADER_SIZE: usize = core::mem::size_of::<FrameHeader>();
@@ -34,15 +35,15 @@ impl Codec for FrameHeader {
 /// `FramedStream` is a generic framing module that segments a stream of `u8` data (`S`)
 /// into multiple packets. It maintains an internal state to manage reading from the stream
 /// and buffers data until complete packets are formed.
-pub struct FramedStream<S: Read + Write + Send> {
-    stream: S,
+pub struct FramedStream<S: Read + Write + Send + 'static> {
+    pub(crate) stream: S,
     read_buffer: Vec<u8>,
     read_remain: usize,
 }
 
 impl<S> FramedStream<S>
 where
-    S: Read + Write + Send,
+    S: Read + Write + Send + 'static,
 {
     pub fn new(stream: S) -> Self {
         Self {
@@ -56,7 +57,7 @@ where
 #[maybe_async::maybe_async]
 impl<S> SpdmDeviceIo for FramedStream<S>
 where
-    S: Read + Write + Send,
+    S: Read + Write + Send + 'static,
 {
     async fn receive(
         &mut self,
@@ -153,5 +154,9 @@ where
 
     async fn flush_all(&mut self) -> SpdmResult {
         self.stream.flush().map_err(|_| SPDM_STATUS_SEND_FAIL)
+    }
+
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
     }
 }

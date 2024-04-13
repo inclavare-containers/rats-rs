@@ -355,6 +355,22 @@ impl GenericSecureTransPort for SpdmResponder {
     //     // TODO:
     //     Ok(())
     // }
+
+    async fn shutdown(&mut self) -> Result<()> {
+        // TODO: rewrite this to make it transport layer independent
+        let mut device = self.context.common.device_io.lock();
+        let any = device.as_any();
+        if let Some(framed_stream) = any.downcast_mut::<FramedStream<TcpStream>>() {
+            framed_stream
+                .stream
+                .shutdown(std::net::Shutdown::Write)
+                .kind(ErrorKind::SpdmShutdown)
+                .context("failed to end session")?
+        } else {
+            warn!("The shutdown() is not supported by the underling stream type");
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

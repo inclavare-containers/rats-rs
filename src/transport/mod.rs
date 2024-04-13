@@ -21,5 +21,5 @@ pub trait GenericSecureTransPort {
 
        SSL_shutdown(): https://www.openssl.org/docs/manmaster/man3/SSL_shutdown.html
     */
-    // async fn shutdown(&mut self) -> Result<()>;
+    async fn shutdown(&mut self) -> Result<()>;
 }
