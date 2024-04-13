@@ -1,6 +1,7 @@
 // mod spdm_emu;
 // mod spdm_requester_emu;
 // mod spdm_responder_emu;
+pub mod half;
 mod io;
 pub mod requester;
 pub mod responder;

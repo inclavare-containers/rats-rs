@@ -36,11 +36,14 @@ pub fn with_spdm_tcp_server(
                     } else {
                         VerifyMode::VERIFY_NONE
                     })
-                    .build_with_stream(stream)?;
+                    .build_with_tcp_stream(stream)?;
 
                 responder.negotiate()?;
 
-                info!("The spdm session on connection {} (requester) is ready.", peer_addr);
+                info!(
+                    "The spdm session on connection {} (requester) is ready.",
+                    peer_addr
+                );
 
                 func(responder)?;
 
@@ -75,11 +78,14 @@ pub fn with_spdm_tcp_client(
         } else {
             VerifyMode::VERIFY_NONE
         })
-        .build_with_stream(stream)?;
+        .build_with_tcp_stream(stream)?;
 
     requester.negotiate()?;
 
-    info!("The spdm session on connection {} (responder) is ready.", server_addr);
+    info!(
+        "The spdm session on connection {} (responder) is ready.",
+        server_addr
+    );
 
     func(requester)?;
 

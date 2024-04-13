@@ -4,6 +4,8 @@
 
 #![forbid(unsafe_code)]
 
+use super::half::ReadHalf;
+use super::half::WriteHalf;
 use super::io::FramedStream;
 use super::secret::asym_crypto::RatsSecretAsymSigner;
 use super::secret::cert_provider::CertProvider;
@@ -21,6 +23,8 @@ use crate::crypto::HashAlgo;
 use crate::errors::*;
 use crate::tee::AutoAttester;
 use crate::transport::GenericSecureTransPort;
+use crate::transport::GenericSecureTransPortRead;
+use crate::transport::GenericSecureTransPortWrite;
 use crate::CertBuilder;
 use codec::{Codec, Reader};
 use common::SpdmTransportEncap;
@@ -29,6 +33,7 @@ use log::warn;
 use maybe_async::maybe_async;
 use spdmlib::common;
 use spdmlib::common::SecuredMessageVersion;
+use spdmlib::common::SpdmContext;
 use spdmlib::common::SpdmDeviceIo;
 use spdmlib::common::SpdmOpaqueSupport;
 use spdmlib::config;
@@ -73,10 +78,7 @@ impl SpdmRequesterBuilder {
         self
     }
 
-    pub fn build_with_stream<S>(&self, stream: S) -> Result<SpdmRequester>
-    where
-        S: Read + Write + Send + Sync + 'static,
-    {
+    pub fn build_with_tcp_stream(&self, stream: TcpStream) -> Result<SpdmRequester> {
         let (cert_provider, asym_signer, measurement_provider) = if cfg!(feature = "mut-auth")
             && self.attest_self
         {
@@ -132,24 +134,22 @@ impl SpdmRequesterBuilder {
 }
 
 pub struct SpdmRequester {
+    stream: TcpStream,
     context: requester::RequesterContext,
     session_id: Option<u32>,
     requested_measurement_summary_hash_type: SpdmMeasurementSummaryHashType,
 }
 
 impl SpdmRequester {
-    pub fn new<S>(
-        stream: S,
+    pub fn new(
+        stream: TcpStream,
         cert_provider: Box<dyn CertProvider>,
         validation_context: Box<dyn ValidationContext>,
         asym_signer: Box<dyn SecretAsymSigner + Send + Sync>,
         cert_validation_strategy: Box<dyn CertValidationStrategy + Send + Sync>,
         measurement_provider: Box<dyn MeasurementProvider + Send + Sync>,
         requested_measurement_summary_hash_type: SpdmMeasurementSummaryHashType,
-    ) -> Self
-    where
-        S: Read + Write + Send + Sync + 'static,
-    {
+    ) -> Self {
         let req_capabilities = SpdmRequestCapabilityFlags::CERT_CAP
             | SpdmRequestCapabilityFlags::CHAL_CAP
             | SpdmRequestCapabilityFlags::ENCRYPT_CAP
@@ -193,7 +193,7 @@ impl SpdmRequester {
         provision_info.my_cert_chain_data[0] = cert_provider.get_full_cert_chain();
         provision_info.peer_root_cert_data[0] = validation_context.get_peer_root_cert();
 
-        let device_io = Arc::new(Mutex::new(FramedStream::new(stream)));
+        let device_io = Arc::new(Mutex::new(FramedStream::new(stream.try_clone().unwrap())));
         let transport_encap: Arc<Mutex<(dyn SpdmTransportEncap + Send + Sync)>> =
             Arc::new(Mutex::new(SimpleTransportEncap {}));
 
@@ -208,10 +208,38 @@ impl SpdmRequester {
         );
 
         Self {
+            stream,
             context,
             session_id: None,
             requested_measurement_summary_hash_type,
         }
+    }
+
+    pub fn into_split(self) -> Result<(ReadHalf, WriteHalf)> {
+        let session_id = self.session_id.ok_or(Error::kind_with_msg(
+            ErrorKind::SpdmSessionNotReady,
+            "session not ready, unknown session_id",
+        ))?;
+
+        /* We reuse self.context.common.device_io here, since FramedStream::read_buffer may not be empty. */
+        let device_io_read_half = self.context.common.device_io.clone();
+        let common = Arc::new(Mutex::new(self.context.common));
+
+        Ok((
+            ReadHalf {
+                is_requester: true,
+                session_id,
+                common: common.clone(),
+                device_io: device_io_read_half,
+            },
+            WriteHalf {
+                is_requester: true,
+                session_id,
+                common,
+                /* Create a new device_io here, to avoid deadlocks when reading and writing device_io at the same time. This is caused by the design limitation of SpdmDeviceIo */
+                device_io: Arc::new(Mutex::new(FramedStream::new(self.stream))),
+            },
+        ))
     }
 }
 
@@ -311,99 +339,6 @@ impl GenericSecureTransPort for SpdmRequester {
         self.session_id = Some(session_id);
         Ok(())
     }
-
-    async fn send(&mut self, bytes: &[u8]) -> Result<()> {
-        // TODO: split message to blocks with negotiate_info.rsp_data_transfer_size_sel
-        // TODO: disable message send after shutdown() called
-        match self.session_id {
-            Some(session_id) => {
-                debug!("session({session_id}) send() {} bytes", bytes.len());
-                self.context
-                    .send_message(Some(session_id), &bytes, true)
-                    .await
-                    .kind(ErrorKind::SpdmSend)
-                    .context("failed to send message")
-            }
-            None => Err(Error::kind_with_msg(
-                ErrorKind::SpdmSessionNotReady,
-                "session not ready, unknown session_id",
-            )),
-        }
-    }
-
-    async fn receive(&mut self, buf: &mut [u8]) -> Result<usize> {
-        // TODO: fix buf length too short
-        let session_id = self.session_id.ok_or(Error::kind_with_msg(
-            ErrorKind::SpdmSessionNotReady,
-            "session not ready, unknown session_id",
-        ))?;
-
-        let timeout = 2 << self.context.common.negotiate_info.rsp_ct_exponent_sel;
-
-        let mut transport_buffer = [0u8; config::RECEIVER_BUFFER_SIZE];
-
-        let used = {
-            let mut device_io = self.context.common.device_io.lock();
-            let device_io: &mut (dyn SpdmDeviceIo + Send + Sync) = device_io.deref_mut();
-
-            device_io
-                .receive(Arc::new(Mutex::new(&mut transport_buffer)), timeout)
-                .await
-                .kind(ErrorKind::SpdmReceive)
-                .context("Failed to receive message from device_io")?
-        };
-
-        let (used, is_app_message) = self
-            .context
-            .common
-            .decode_secured_message(
-                session_id,
-                &transport_buffer[..used],
-                buf,
-                false, /* The message is from responder */
-            )
-            .await
-            .kind(ErrorKind::SpdmReceive)
-            .context("Failed to decode as secured message")?;
-        if !is_app_message {
-            Err(Error::kind_with_msg(
-                ErrorKind::SpdmReceive,
-                "App message is expected",
-            ))?
-        }
-
-        debug!("session({session_id}) receive() {used} bytes");
-        Ok(used)
-    }
-
-
-    // async fn shutdown(&mut self) -> Result<()> {
-    //     if !self.shutdown_trigged {
-    //         self.shutdown_trigged = true;
-    //         self.context
-    //             .end_session(self.session_id.unwrap())
-    //             .await
-    //             .kind(ErrorKind::SpdmShutdown)
-    //             .context("failed to end session")
-    //     } else {
-    //         Err(Error::kind(ErrorKind::SpdmSessionShutdownTriggered))
-    //     }
-    // }
-    async fn shutdown(&mut self) -> Result<()> {
-        // TODO: rewrite this to make it transport layer independent
-        let mut device = self.context.common.device_io.lock();
-        let any = device.as_any();
-        if let Some(framed_stream) = any.downcast_mut::<FramedStream<TcpStream>>() {
-            framed_stream
-                .stream
-                .shutdown(std::net::Shutdown::Write)
-                .kind(ErrorKind::SpdmShutdown)
-                .context("failed to end session")?
-        } else {
-            warn!("The shutdown() is not supported by the underling stream type");
-        }
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -500,8 +435,10 @@ pub mod tests {
         );
         requester.negotiate().await?;
 
+        let (mut read_half, mut write_half) = requester.into_split()?;
+
         for i in 0..1024u32 {
-            requester.send(&i.to_be_bytes()).await?;
+            write_half.send(&i.to_be_bytes()).await?;
         }
 
         let mut receive_buffer = [0u8; config::MAX_SPDM_MSG_SIZE];
@@ -509,14 +446,14 @@ pub mod tests {
         for i in 1024..2048u32 {
             let expected = i.to_be_bytes();
             let expected_len = expected.len();
-            let len = requester
+            let len = read_half
                 .receive(&mut receive_buffer[..expected_len])
                 .await?;
             assert_eq!(expected_len, len);
             assert_eq!(expected, receive_buffer[..expected_len]);
         }
 
-        // requester.shutdown().await?;
+        write_half.shutdown().await?;
         Ok(())
     }
 }
