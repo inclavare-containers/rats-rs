@@ -25,9 +25,11 @@ use crate::CertBuilder;
 use codec::{Codec, Reader};
 use common::SpdmTransportEncap;
 use log::debug;
+use log::warn;
 use maybe_async::maybe_async;
 use spdmlib::common;
 use spdmlib::common::SecuredMessageVersion;
+use spdmlib::common::SpdmDeviceIo;
 use spdmlib::common::SpdmOpaqueSupport;
 use spdmlib::config;
 use spdmlib::crypto::cert_operation::CertValidationStrategy;
@@ -41,6 +43,8 @@ use spdmlib::secret::measurement::MeasurementProvider;
 use spin::Mutex;
 use std::io::Read;
 use std::io::Write;
+use std::net::TcpStream;
+use std::ops::DerefMut;
 use std::sync::Arc;
 
 pub struct SpdmRequesterBuilder {
@@ -310,14 +314,16 @@ impl GenericSecureTransPort for SpdmRequester {
 
     async fn send(&mut self, bytes: &[u8]) -> Result<()> {
         // TODO: split message to blocks with negotiate_info.rsp_data_transfer_size_sel
-        /* disable message send after shutdown() called */
+        // TODO: disable message send after shutdown() called
         match self.session_id {
-            Some(session_id) => self
-                .context
-                .send_message(Some(session_id), &bytes, true)
-                .await
-                .kind(ErrorKind::SpdmSend)
-                .context("failed to send message"),
+            Some(session_id) => {
+                debug!("session({session_id}) send() {} bytes", bytes.len());
+                self.context
+                    .send_message(Some(session_id), &bytes, true)
+                    .await
+                    .kind(ErrorKind::SpdmSend)
+                    .context("failed to send message")
+            }
             None => Err(Error::kind_with_msg(
                 ErrorKind::SpdmSessionNotReady,
                 "session not ready, unknown session_id",
@@ -327,21 +333,49 @@ impl GenericSecureTransPort for SpdmRequester {
 
     async fn receive(&mut self, buf: &mut [u8]) -> Result<usize> {
         // TODO: fix buf length too short
-        // TODO: check is_app_message
-        // let mut receive_buffer = [0u8; config::MAX_SPDM_MSG_SIZE];
-        match self.session_id {
-            Some(session_id) => self
-                .context
-                .receive_message(Some(session_id), &mut buf[..], true)
+        let session_id = self.session_id.ok_or(Error::kind_with_msg(
+            ErrorKind::SpdmSessionNotReady,
+            "session not ready, unknown session_id",
+        ))?;
+
+        let timeout = 2 << self.context.common.negotiate_info.rsp_ct_exponent_sel;
+
+        let mut transport_buffer = [0u8; config::RECEIVER_BUFFER_SIZE];
+
+        let used = {
+            let mut device_io = self.context.common.device_io.lock();
+            let device_io: &mut (dyn SpdmDeviceIo + Send + Sync) = device_io.deref_mut();
+
+            device_io
+                .receive(Arc::new(Mutex::new(&mut transport_buffer)), timeout)
                 .await
                 .kind(ErrorKind::SpdmReceive)
-                .context("failed to receive message"),
-            None => Err(Error::kind_with_msg(
-                ErrorKind::SpdmSessionNotReady,
-                "session not ready, unknown session_id",
-            )),
+                .context("Failed to receive message from device_io")?
+        };
+
+        let (used, is_app_message) = self
+            .context
+            .common
+            .decode_secured_message(
+                session_id,
+                &transport_buffer[..used],
+                buf,
+                false, /* The message is from responder */
+            )
+            .await
+            .kind(ErrorKind::SpdmReceive)
+            .context("Failed to decode as secured message")?;
+        if !is_app_message {
+            Err(Error::kind_with_msg(
+                ErrorKind::SpdmReceive,
+                "App message is expected",
+            ))?
         }
+
+        debug!("session({session_id}) receive() {used} bytes");
+        Ok(used)
     }
+
 
     // async fn shutdown(&mut self) -> Result<()> {
     //     if !self.shutdown_trigged {

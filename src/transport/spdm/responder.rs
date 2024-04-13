@@ -11,6 +11,7 @@ use super::secret::measurement::{EmptyMeasurementProvider, RatsMeasurementProvid
 use super::VerifyMode;
 use codec::Codec;
 use common::SpdmTransportEncap;
+use log::{debug, warn};
 use maybe_async::maybe_async;
 use spdmlib::common::session::SpdmSessionState;
 use spdmlib::common::{SecuredMessageVersion, SpdmOpaqueSupport};
@@ -18,6 +19,8 @@ use spdmlib::crypto::cert_operation::{CertValidationStrategy, DefaultCertValidat
 use spdmlib::secret::asym_sign::{DefaultSecretAsymSigner, SecretAsymSigner};
 use spdmlib::secret::measurement::MeasurementProvider;
 use std::io::{Read, Write};
+use std::net::TcpStream;
+use std::ops::DerefMut;
 // TODO: secret_impl_sample for measurements
 // use spdm_emu::{secret_impl_sample::*, EMU_STACK_SIZE};
 use spdmlib::{
@@ -34,6 +37,7 @@ use crate::transport::spdm::transport::SimpleTransportEncap;
 use crate::transport::GenericSecureTransPort;
 use crate::{errors::*, CertBuilder};
 use alloc::sync::Arc;
+use spdmlib::common::SpdmDeviceIo;
 
 pub struct SpdmResponderBuilder {
     verify_mode: VerifyMode,
@@ -61,7 +65,7 @@ impl SpdmResponderBuilder {
         self
     }
 
-    pub fn build_with_stream<S>(&self, stream: S) -> Result<SpdmResonder>
+    pub fn build_with_stream<S>(&self, stream: S) -> Result<SpdmResponder>
     where
         S: Read + Write + Send + Sync + 'static,
     {
@@ -106,7 +110,7 @@ impl SpdmResponderBuilder {
                 )
             };
 
-        Ok(SpdmResonder::new(
+        Ok(SpdmResponder::new(
             stream,
             cert_provider,
             validation_context,
@@ -117,12 +121,12 @@ impl SpdmResponderBuilder {
     }
 }
 
-pub struct SpdmResonder {
+pub struct SpdmResponder {
     context: responder::ResponderContext,
     session_id: Option<u32>,
 }
 
-impl SpdmResonder {
+impl SpdmResponder {
     pub fn new<S>(
         stream: S,
         cert_provider: Box<dyn CertProvider>,
@@ -222,7 +226,7 @@ impl SpdmResonder {
 }
 
 #[maybe_async]
-impl GenericSecureTransPort for SpdmResonder {
+impl GenericSecureTransPort for SpdmResponder {
     async fn negotiate(&mut self) -> Result<()> {
         let mut raw_packet = [0u8; config::RECEIVER_BUFFER_SIZE];
         let mut spdm_buffer = [0u8; config::MAX_SPDM_MSG_SIZE];
@@ -286,6 +290,7 @@ impl GenericSecureTransPort for SpdmResonder {
         // TODO: split message to blocks with negotiate_info.rsp_data_transfer_size_sel
         match self.session_id {
             Some(session_id) => {
+                debug!("session({session_id}) send() {} bytes", bytes.len());
                 self.ensure_session_established(session_id)?;
                 self.context
                     .send_message(Some(session_id), &bytes, true)
@@ -301,72 +306,49 @@ impl GenericSecureTransPort for SpdmResonder {
     }
 
     async fn receive(&mut self, buf: &mut [u8]) -> Result<usize> {
-        if self.session_id.is_none() {
-            return Err(Error::kind_with_msg(
-                ErrorKind::SpdmSessionNotReady,
-                "session not ready, unknown session_id",
-            ));
+        // TODO: fix buf length too short
+
+        let session_id = self.session_id.ok_or(Error::kind_with_msg(
+            ErrorKind::SpdmSessionNotReady,
+            "session not ready, unknown session_id",
+        ))?;
+
+        let timeout = 2 << self.context.common.negotiate_info.rsp_ct_exponent_sel;
+
+        let mut transport_buffer = [0u8; config::RECEIVER_BUFFER_SIZE];
+
+        let used = {
+            let mut device_io = self.context.common.device_io.lock();
+            let device_io: &mut (dyn SpdmDeviceIo + Send + Sync) = device_io.deref_mut();
+
+            device_io
+                .receive(Arc::new(Mutex::new(&mut transport_buffer)), timeout)
+                .await
+                .kind(ErrorKind::SpdmReceive)
+                .context("Failed to receive message from device_io")?
         };
 
-        let mut raw_packet = [0u8; config::RECEIVER_BUFFER_SIZE];
-        let mut spdm_buffer = [0u8; config::MAX_SPDM_MSG_SIZE];
-
-        loop {
-            let res = self
-                .context
-                .process_message(false, &mut raw_packet, &mut spdm_buffer)
-                .await;
-            match res {
-                ProcessMessageResult::Success { used: _ } => continue,
-                ProcessMessageResult::SuccessSecured {
-                    used,
-                    decode_size,
-                    is_app_message,
-                } => {
-                    let mut read = codec::Reader::init(&raw_packet[0..used]);
-                    let session_id = match u32::read(&mut read) {
-                        Some(v) => v,
-                        None => {
-                            break Err(Error::kind_with_msg(
-                                ErrorKind::SpdmReceive,
-                                "failed to get session_id",
-                            ));
-                        }
-                    };
-                    if session_id != self.session_id.unwrap() {
-                        break Err(Error::kind_with_msg(
-                            ErrorKind::SpdmReceive,
-                            format!(
-                                "session_id mismatch, expected {}, got {}",
-                                self.session_id.unwrap(),
-                                session_id,
-                            ),
-                        ));
-                    }
-
-                    if is_app_message {
-                        /* copy received data to user provided buffer */
-                        // TODO: store remain messages
-                        let data_len_to_copy = std::cmp::min(buf.len(), decode_size);
-                        buf[..data_len_to_copy].copy_from_slice(&spdm_buffer[..data_len_to_copy]);
-                        return Ok(data_len_to_copy);
-                    } else {
-                        self.ensure_session_established(session_id)?;
-                    }
-                }
-                ProcessMessageResult::SpdmHandleError(spdm_status) => {
-                    return Err(spdm_status)
-                        .kind(ErrorKind::SpdmReceive)
-                        .context("process_message failed while handling SPDM message")
-                }
-                ProcessMessageResult::DecodeError(_used) => {
-                    return Err(Error::kind_with_msg(
-                        ErrorKind::SpdmReceive,
-                        "failed while parsing transport data",
-                    ));
-                }
-            }
+        let (used, is_app_message) = self
+            .context
+            .common
+            .decode_secured_message(
+                session_id,
+                &transport_buffer[..used],
+                buf,
+                true, /* The message is from requester */
+            )
+            .await
+            .kind(ErrorKind::SpdmReceive)
+            .context("Failed to decode as secured message")?;
+        if !is_app_message {
+            Err(Error::kind_with_msg(
+                ErrorKind::SpdmReceive,
+                "App message is expected",
+            ))?
         }
+
+        debug!("session({session_id}) receive() {used} bytes");
+        Ok(used)
     }
 
     // async fn shutdown(&mut self) -> Result<()> {
@@ -441,7 +423,7 @@ pub mod tests {
             Box::new(EmptyValidationContext {}) as Box<dyn ValidationContext>
         };
 
-        let mut responder = SpdmResonder::new(
+        let mut responder = SpdmResponder::new(
             stream,
             cert_provider,
             validation_context,
