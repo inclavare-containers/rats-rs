@@ -81,7 +81,7 @@ where
 
             if buffer_size >= self.read_buffer.len() {
                 /* not enough but the buffer is full */
-                warn!("broken packet: buffer is too small and should be at least {expected_size} bytes");
+                warn!("broken packet: buffer is too small ({} bytes) and should be at least {expected_size} bytes", self.read_buffer.len());
                 break false;
             }
 
@@ -98,7 +98,11 @@ where
 
             if s == 0 {
                 /* the stream is closed, and we have not got more bytes at this try, so let's give up. */
-                error!("broken packet: unexpected EOF");
+                if buffer_size != 0 {
+                    /* however, if we have already got some bytes of current packet, which means we have a incomplete packet, let's print an error msg. */
+                    // TODO: return Error at here.
+                    error!("broken packet: unexpected EOF");
+                }
                 break false;
             }
         };
