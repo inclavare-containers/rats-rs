@@ -22,6 +22,9 @@ WORKDIR /root
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
 ENV PATH         /root/.cargo/bin:$PATH
 
+# install tools for code-coverage
+RUN rustup component add llvm-tools-preview
+
 # install "just"
 RUN cargo install just
 
