@@ -412,6 +412,8 @@ pub mod tests {
         Ok(())
     }
 
+    const THREAD_STACK_SIZE: usize = 8 * 1024 * 1024;
+
     #[test]
     fn test_spdm_over_tcp() -> Result<()> {
         let _ = env_logger::builder()
@@ -493,7 +495,8 @@ pub mod tests {
                     TcpListener::bind("127.0.0.1:2323").expect("Couldn't bind to the server");
                 println!("server start!");
 
-                let t2 = std::thread::spawn(requester_func);
+                let builder = std::thread::Builder::new().stack_size(THREAD_STACK_SIZE);
+                let t2 = builder.spawn(requester_func).unwrap();
 
                 println!("waiting for next connection!");
                 let (stream, _) = listener.accept().expect("Read stream error!");
@@ -514,7 +517,8 @@ pub mod tests {
                 t2.join().unwrap();
             };
 
-            let t1 = std::thread::spawn(responder_func);
+            let builder = std::thread::Builder::new().stack_size(THREAD_STACK_SIZE);
+            let t1 = builder.spawn(responder_func).unwrap();
 
             t1.join().unwrap();
         }
