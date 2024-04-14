@@ -21,7 +21,7 @@ pub struct RatsCertValidationStrategy {}
 impl CertValidationStrategy for RatsCertValidationStrategy {
     fn verify_cert_chain(&self, cert_chain: &[u8]) -> spdmlib::error::SpdmResult {
         // TODO: check evidence type and choose Verifier
-        match crate::cert::verify_cert_der(cert_chain) {
+        match crate::cert::verify::verify_cert_der(cert_chain) {
             Ok(claims) => {
                 // TODO: check BUILT_IN_CLAIM_SGX_MR_ENCLAVE etc.
                 info!(

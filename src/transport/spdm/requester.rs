@@ -18,6 +18,7 @@ use super::secret::measurement::EmptyMeasurementProvider;
 use super::secret::measurement::RatsMeasurementProvider;
 use super::transport::SimpleTransportEncap;
 use super::VerifyMode;
+use crate::cert::create::CertBuilder;
 use crate::crypto::AsymmetricAlgo;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
@@ -25,7 +26,6 @@ use crate::tee::AutoAttester;
 use crate::transport::GenericSecureTransPort;
 use crate::transport::GenericSecureTransPortRead;
 use crate::transport::GenericSecureTransPortWrite;
-use crate::CertBuilder;
 use codec::{Codec, Reader};
 use common::SpdmTransportEncap;
 use log::debug;
@@ -350,7 +350,7 @@ pub mod tests {
     };
 
     use crate::{
-        cert::CertBuilder,
+        cert::create::CertBuilder,
         crypto::{AsymmetricAlgo, HashAlgo},
         transport::spdm::secret::{
             asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},

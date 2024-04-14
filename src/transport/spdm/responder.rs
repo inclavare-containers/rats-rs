@@ -31,12 +31,13 @@ use spdmlib::{
 };
 use spin::Mutex;
 extern crate alloc;
+use crate::cert::create::CertBuilder;
 use crate::crypto::{AsymmetricAlgo, HashAlgo};
+use crate::errors::*;
 use crate::tee::AutoAttester;
 use crate::transport::spdm::io::FramedStream;
 use crate::transport::spdm::transport::SimpleTransportEncap;
 use crate::transport::GenericSecureTransPort;
-use crate::{errors::*, CertBuilder};
 use alloc::sync::Arc;
 use spdmlib::common::SpdmDeviceIo;
 
@@ -317,7 +318,7 @@ pub mod tests {
     use spdmlib::crypto::cert_operation::DefaultCertValidationStrategy;
 
     use crate::{
-        cert::CertBuilder,
+        cert::create::CertBuilder,
         crypto::{AsymmetricAlgo, HashAlgo},
         tee::{AutoAttester, TeeType},
         transport::{
