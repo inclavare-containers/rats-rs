@@ -3,94 +3,94 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 
-rats-rs是一个纯Rust的CPU-TEE SPDM远程证明和安全传输实现，它建立在[spdm-rs](https://github.com/ccc-spdm-tools/spdm-rs)之上。
+rats-rs是一个纯Rust实现的TEE远程证明库，它的最终目标是让开发者能够方便地将远程证明能力集成到应用程序的各个方面。它还包含了一个基于SPDM协议的安全会话层实现，能够为与TEE环境的通信提供类似于TLS的安全加密层。
 
-**注意，这个项目目前还未达到生产可用状态，其安全性也未得到正式评估。**
+## 关键特性
+<!-- Key features -->
 
-在设计上，该项目尽量模块化，并通过cargo的features来进行条件编译，（现在或者未来）包含如下模块：
-- `attester` / `verifier`：不同CPU TEE的证明和验证逻辑的实现
-    - 现在包含了SGX-DCAP（ECDSA）的支持，由`attester-sgx-dcap-occlum`和`verifier-sgx-dcap`控制
-- `crypto`：提供密码学原语的抽象接口，例如hash、非对称加密（签名）
-    - 目前的提供了一个基于[RustCrypto](https://github.com/RustCrypto)的实现（通过`crypto-rustcrypto`控制），未来可以考虑提供基于[ring](https://github.com/briansmith/ring)或者[rust-openssl](https://github.com/sfackler/rust-openssl)的实现
-- `cert`：提供证书的生成和签名验证实现。
-    - 现在我们拥有一个符合[Interoperable RA-TLS](https://github.com/CCC-Attestation/interoperable-ra-tls)的实现（我们将其简称为dice证书），需要注意的是dice证书与[DSP0274](https://www.dmtf.org/dsp/DSP0274)中对SPDM证书的规定描述存在一定距离，例如：
-        - dice证书是单一的自签名证书，而SPDM证书包含了多级证书，且包含Device/Alias/Generic三种证书模型
-        - 对于代表设备的证书，SPDM对其中的一些字段有强制要求
-        
-        尽管如此，由于dice证书和SPDM证书的用途和目的是一致的，在目前阶段本项目中仍然使用dice证书作为SPDM协商过程中的证书格式，未来将考虑设计一种更符合SPDM证书要求的证书格式。
-- `transport`：提供建立在远程证明之上的任意安全传输层（例如SPDM和TLS、DTLS）的实现。
-    - 目前包含了一个基于SPDM协议的实现，能够完成握手和数据传输。    
-        SPDM协议的部分基于[spdm-rs](https://github.com/ccc-spdm-tools/spdm-rs)项目，我们提供了对Requester和Responder的简易封装
+- 纯Rust实现
+- 提供易于使用的生成器模式(Builder Pattern)API
+- 对不同TEE类型的可扩展性
+- 为上层应用提供三种层次的API
+- 支持指定证书使用的加密算法
+- 自动检测当前运环境TEE类型
+- 支持基于features的功能剪裁
 
-        此外，spdm-rs中提供了SPDM传输层（`trait SpdmTransportEncap`）的PCIDOE和MCTP两种不同的实现。对此，我们提供了一个类似的`struct SimpleTransportEncap`实现，使用一个`u8`的tag来区分SPDM消息、受保护的SPDM消息和APP消息这三种消息。
-        
-        为了让SPDM协议在现有通信链路如TCP等基于上运行，我们提供了一个`struct FramedStream`实现。
+## 支持的TEE类型
+<!-- Supported TEE types -->
 
-        由于spdm-rs的原始实现与本项目的设计目标之间存在一些差距，我们对spdm-rs项目进行了fork和修改，主要有：
-        - 调整spdm-rs的`ResponderContext::process_message()`在处理app_message时的逻辑，剔除`SpdmAppMessageHandler`。
-        - 调整`max_cert_chain_data_size`，以容纳我们的dice证书（该变更不改变SPDM协议）
-        - 剔除将一些全局的、类似于c的函数指针的callback实现，抽象成trait接口，例如：
-            - `SecretAsymSigner`：SPDM通信方的私钥和签名逻辑，在SPDM协商阶段会使用该接口完成对给定数据的签名
-            - `CertValidationStrategy`：对SPDM通信对方的证书验证的逻辑
-            - `MeasurementProvider`：提供SPDM通信方的measurements
+本项目在支持的TEE类型方面采用了模块化设计，目前对不同TEE类型的支持情况如下：
 
-## 测试
+| SGX DCAP(Occlum) | TDX | SEV-SNP | CSV | CCA |
+|------------------|-----|---------|-----|-----|
+| ✔️               | 🚧  | 🚧      | 🚧  | 🚧  |
 
-### 单元测试
 
-> [!NOTE]  
-> 由于时间原因，本项目目前只对部分组件提供了单元测试。
+## 快速开始
+<!-- Quick start -->
 
-本项目目前支持在非TEE环境和Occlum环境运行。由于部分逻辑依赖于TEE环境的支持，一些测试在非TEE环境中会被跳过，因此建议在Host和Occlum环境中分别运行一次单元测试。
+接下来的流程将指引你在SGX实例上运行rats-rs的样例程序spdm-echosvr，其源码可以在[这里](/examples/spdm/)找到。
 
-- 在Host环境运行单元测试
+1. 首先准备rats-rs的构建环境，建议直接使用我们预构建的Docker容器
 
-```sh
-just run-test-in-host
-```
+    ```sh
+    docker run -it --privileged --device=/dev/sgx_enclave --device=/dev/sgx_provision ghcr.io/imlk0/rats-rs:master bash
+    ```
 
-- 在Occlum环境运行单元测试
+2. Clone代码并编译样例程序
+    
+    ```sh
+    git clone git@github.com:imlk0/rats-rs.git
+    cd rats-rs
+    git submodule update --init --recursive
 
-```sh
-just run-test-in-occlum
-```
+    cargo build --example spdm
+    ```
 
-### 集成测试
-
-TODO: CI/CD
-
-## example
-
-### spdm
-
-本项目提供了一个样例程序`examples/spdm.rs`，演示了如何创建一个运行于TCP流之上的SPDM安全通信外壳，并在其中进行数据传输。
-
-该程序支持在非TEE的host环境，和基于SGX的Occlum环境运行。以下提供一个简单的运行方法，详细的参数可以通过在执行时指定`--help`选项了解。
-
-1. 在Occlum中运行server端
+3. 运行Server端程序
 
     ```sh
     just run-in-occlum echo-server --attest-self --listen-on-tcp 127.0.0.1:8080
     ```
-> [!IMPORTANT]  
-> `--attest-self`选项指定服务端需要作为attester向对端证明自己的身份，指定该选项时必须在某种TEE环境中运行。
 
-2. 运行client端
+4. 运行Client端程序（在新的终端中）
 
-    在该例子中，client端不需要向peer证明自己身份，因此，既可以运行在非TEE环境也可以运行在TEE环境。
-
-    例如，运行在非TEE环境：
     ```sh
     just run-in-host echo-client --verify-peer --connect-to-tcp 127.0.0.1:8080
     ```
 
-    或者，运行在非TEE环境：
-    ```sh
-    just run-in-occlum echo-client --verify-peer --connect-to-tcp 127.0.0.1:8080
-    ```
+    你将从程序日志中观测到Client和Server之间的交互，并且可以使用环境变量`RATS_RS_LOG_LEVEL`来控制日志级别。
 
-> [!NOTE]
-> 可使用环境变量`RATS_RS_LOG_LEVEL`来控制该程序启用的日志级别，环境变量的取值为`error`, `warn`, `info`, `debug`和`trace`，默认值为`trace`
+    关于示例程序的更多详细信息，请查看[这份](/examples/spdm/README.md)文档
+
+## 作为依赖使用
+
+将以下内容添加到你的`Cargo.toml`文件
+
+```toml
+[dependencies]
+rats-rs = {git = "https://github.com/imlk0/rats-rs", branch = "master"}
+```
+
+要开始使用rats-rs的API，建议参考[示例程序](/examples/spdm/)。
+
+此外值得一提的是，rats-rs的编译和运行依赖于一些系统库，你可以在[这里](/docs/how-to-build.md)找到完整的构建环境搭建流程。
+
+## 对于开发人员
+
+本项目采用[just](https://github.com/casey/just/)工具来封装一些自动化流程，诸如测试、运行、代码覆盖率计算等。它与Makefile非常相似，当你需要引入新的流程时，请尽量将其添加到[justfile](/justfile)中。
+
+在开始编码之前，你可以先阅读[docs](/docs/)下的文档。
+
+## 项目文档
+
+大部分文档都归类在[docs](/docs/)目录下，这里列举出一些相对重要的文档，方便开始接触本项目。
+
+- [环境搭建指引](/docs/how-to-build.md)
+- [测试指引与代码覆盖率](/docs/how-to-run-test.md)
+- [项目整体架构与模块功能描述](/docs/architecture-of-the-project.md)
+- [CPU-SPDM协议核心设计思路](/docs/core-design-of-cpu-spdm.md)
+- [示例程序构建与运行说明](/examples/spdm/README.md)
 
 
 ## License
