@@ -24,13 +24,13 @@ docker build --tag rats-rs:master .
 - SGX实例：
 
     ```sh
-    docker run -it --privileged --device=/dev/sgx_enclave --device=/dev/sgx_provision rats-rs:master
+    docker run -it --privileged --device=/dev/sgx_enclave --device=/dev/sgx_provision rats-rs:master bash
     ```
 
 - TDX实例：
 
     ```sh
-    docker run -it --privileged --device=/dev/tdx_guest rats-rs:master
+    docker run -it --privileged --device=/dev/tdx_guest rats-rs:master bash
     ```
 
 ### 手动安装依赖
