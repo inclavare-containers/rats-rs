@@ -24,7 +24,7 @@
 
 ### 远程证明原语
 
-该模块包含了不同TEE类型对应的的远程证明和验证逻辑。在该模块中，项目提供了对不同TEE类型的抽象，包括`Attester`、`Verifier`、`Evidence`、`Claims`等。对应的trait设计如下：
+该模块包含了不同TEE类型对应的远程证明和验证逻辑。在该模块中，项目提供了对不同TEE类型的抽象，包括`Attester`、`Verifier`、`Evidence`、`Claims`等。对应的trait设计如下：
 
 ```rust
 /// Trait representing generic evidence.
@@ -39,7 +39,7 @@ pub trait GenericEvidence: Any {
     fn get_tee_type(&self) -> TeeType;
 
     /// Parse the evidence and return a set of claims.
-    fn get_claims(&self) ->  Result<Claims>;
+    fn get_claims(&self) -> Result<Claims>;
 }
 
 /// Trait representing a generic attester.
@@ -61,6 +61,9 @@ pub trait GenericVerifier {
         report_data: &[u8],
     ) -> Result<()>;
 }
+
+pub type Claims = IndexMap<String, Vec<u8>>;
+
 ```
 
 每种TEE类型只需要提供trait对应的实现，即可通过组合的方式和项目中的其它组件协同使用。
