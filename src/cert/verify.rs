@@ -217,6 +217,8 @@ fn extract_ext_with_oid<'a>(cert: &'a Certificate, oid: &ObjectIdentifier) -> Op
 #[cfg(test)]
 pub mod tests {
 
+    use indexmap::IndexMap;
+
     use crate::{
         cert::create::CertBuilder,
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
@@ -229,6 +231,35 @@ pub mod tests {
 
     #[allow(unused_imports)]
     use super::*;
+
+    #[test]
+    fn test_verify_cert_der() -> Result<()> {
+        if TeeType::detect_env() == None {
+            /* skip */
+            return Ok(());
+        }
+
+        /* Test verifiy normal cert */
+        let mut claims = Claims::new();
+        claims.insert("key1".into(), "value1".into());
+        claims.insert("key2".into(), "value2".into());
+
+        let attester = AutoAttester::new();
+        let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
+            .with_claims(claims.clone())
+            .build(AsymmetricAlgo::P256)?;
+        let cert = cert_bundle.cert_to_der()?;
+
+        let parsed_claims = verify_cert_der(&cert)?;
+
+        let hex_claims = parsed_claims
+            .into_iter()
+            .map(|(k, v)| (k, hex::encode(v)))
+            .collect::<IndexMap<String, String>>();
+        println!("{hex_claims:?}");
+
+        Ok(())
+    }
 
     #[test]
     fn test_verify_attestation_certificate() -> Result<()> {
