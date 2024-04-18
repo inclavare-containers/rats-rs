@@ -91,6 +91,7 @@ rats-rs = {git = "https://github.com/imlk0/rats-rs", branch = "master"}
 - [项目整体架构与模块功能描述](/docs/architecture-of-the-project.md)
 - [CPU-SPDM协议核心设计思路](/docs/core-design-of-cpu-spdm.md)
 - [示例程序构建与运行说明](/examples/spdm/README.md)
+- [CPU-TEE SPDM协议标准化文档：CPU TEE Secured Messages using SPDM Binding Specification](/docs/CPU%20TEE%20Secured%20Messages%20using%20SPDM%20Binding%20Specification.pdf)
 
 
 ## License
