@@ -7,6 +7,19 @@ pub mod claims;
 #[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap"))]
 pub mod sgx_dcap;
 
+#[cfg(any(feature = "attester-tdx", feature = "verifier-tdx"))]
+pub mod tdx;
+
+#[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap", feature = "attester-tdx", feature = "verifier-tdx"))]
+pub(crate) mod intel_dcap{
+    #![allow(non_upper_case_globals)]
+    #![allow(non_camel_case_types)]
+    #![allow(non_snake_case)]
+    #![allow(dead_code)]
+    
+    include!(concat!(env!("OUT_DIR"), "/sgx_dcap_bindings.rs"));
+}
+
 /// Trait representing generic evidence.
 pub trait GenericEvidence: Any {
     /// Return the CBOR tag used for generating DICE cert.
@@ -46,14 +59,19 @@ pub trait GenericVerifier {
 #[derive(Debug,PartialEq)]
 pub enum TeeType {
     SgxDcap,
+    Tdx,
 }
 
 impl TeeType {
     /// Detects the current TEE environment and returns the detected TeeType.
     pub fn detect_env() -> Option<Self> {
         #[cfg(feature = "attester-sgx-dcap")]
-        if sgx_dcap::attester::detect_env() {
+        if sgx_dcap::detect_env() {
             return Some(Self::SgxDcap);
+        }
+        #[cfg(feature = "attester-tdx")]
+        if tdx::detect_env() {
+            return Some(Self::Tdx);
         }
         return None;
     }
@@ -68,7 +86,12 @@ impl AutoEvidence{
         cbor_tag: u64,
         raw_evidence: &[u8],
     ) -> Result<Self> {
+        #[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap"))]
         if let Some(res) = sgx_dcap::evidence::create_evidence_from_dice(cbor_tag, raw_evidence) {
+            return res.map(|res| Self(Box::new(res)));
+        }
+        #[cfg(any(feature = "attester-tdx", feature = "verifier-tdx"))]
+        if let Some(res) = tdx::evidence::create_evidence_from_dice(cbor_tag, raw_evidence) {
             return res.map(|res| Self(Box::new(res)));
         }
         return Err(Error::kind_with_msg(
@@ -122,6 +145,11 @@ impl GenericAttester for AutoAttester {
                     let attester = sgx_dcap::attester::SgxDcapAttester::new();
                     attester.get_evidence(report_data).map(|ev|AutoEvidence(Box::new(ev) as Box<dyn GenericEvidence>)) 
                 }
+                #[cfg(feature = "attester-tdx")]
+                TeeType::Tdx => {
+                    let attester = tdx::attester::TdxAttester::new();
+                    attester.get_evidence(report_data).map(|ev|AutoEvidence(Box::new(ev) as Box<dyn GenericEvidence>)) 
+                }
                 #[allow(unreachable_patterns)]
                 _ => {
                     Err(Error::kind_with_msg(
@@ -164,6 +192,15 @@ impl GenericVerifier for AutoVerifier {
                 match evidence.downcast_ref::<_>() {
                     Some(ev) => {
                         return sgx_dcap::verifier::SgxDcapVerifier::new().verify_evidence(ev, report_data);
+                    },
+                    None => unreachable!("bug deteccted"),
+                }
+            }
+            #[cfg(feature = "verifier-tdx")]
+            TeeType::Tdx => {
+                match evidence.downcast_ref::<_>() {
+                    Some(ev) => {
+                        return tdx::verifier::TdxVerifier::new().verify_evidence(ev, report_data);
                     },
                     None => unreachable!("bug deteccted"),
                 }

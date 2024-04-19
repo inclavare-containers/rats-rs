@@ -20,6 +20,18 @@ pub enum ErrorKind {
 
     SgxDcapVerifierReportDataMismatch,
 
+    TdxUnsupportedEvidenceType,
+
+    TdxAttesterGenerateQuoteFailed,
+
+    TdxVerifierVerifyQuoteFailed,
+
+    TdxVerifierGetSupplementalDataFailed,
+
+    TdxMulformedQuote,
+
+    TdxVerifierReportDataMismatch,
+
     InvalidParameter,
 
     UnsupportedHashAlgo,

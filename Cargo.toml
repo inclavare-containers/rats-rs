@@ -24,8 +24,7 @@ ring = {version = "0.17.6", optional = true}
 rsa = {version = "0.9.6", features = ["sha2"], optional = true}
 serde = {version = "1.0", features = ["derive"]}
 serde_bytes = "0.11.14"
-sgx-dcap-quoteverify-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.16", optional = true}
-sgx-dcap-quoteverify-sys = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.16", optional = true}
+intel-tee-quote-verification-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
 sha2 = {version = "0.10.8", features = ["oid"], optional = true}
 signature = {version = "2.2.0", optional = true}
 spdmlib = {git = "https://github.com/ccc-spdm-tools/spdm-rs", branch = "main", optional = true, features = ["spdm-ring", "hashed-transcript-data", "downcast"]}
@@ -37,6 +36,7 @@ zeroize = "1.7.0"
 bstr = "1.9.1"
 itertools = "0.12.1"
 indexmap = {version = "2.2.6", features = ["std", "serde"]}
+tdx-attest-rs = { git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true }
 
 [patch."https://github.com/ccc-spdm-tools/spdm-rs"]
 codec = {path = 'deps/spdm-rs/codec'}
@@ -51,20 +51,26 @@ webpki = {path = "deps/spdm-rs/external/webpki"}
 [features]
 async-tokio = ["dep:tokio"]
 crypto-rustcrypto = ["dep:x509-cert", "dep:sha2", "dep:p256", "dep:rsa", "dep:pkcs8", "dep:const-oid", "dep:signature"]
-default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "verifier-sgx-dcap", "is_sync"]
+default = ["crypto-rustcrypto", "transport-spdm", "attester-tdx", "verifier-tdx", "is_sync"]
+# default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "verifier-sgx-dcap", "is_sync"]
 # default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "verifier-sgx-dcap", "async-tokio"]
 is_sync = ["maybe-async/is_sync", "spdmlib/is_sync"]
 transport-spdm = ["dep:spdmlib", "dep:codec", "dep:ring"]
-attester-sgx-dcap = ["dep:sgx-dcap-quoteverify-sys"]
+attester-sgx-dcap = []
 attester-sgx-dcap-occlum = ["attester-sgx-dcap", "dep:occlum_dcap"]
 attester-sgx-dcap-enclave = [] # TODO: plain enclave mode
-verifier-sgx-dcap = ["dep:sgx-dcap-quoteverify-rs", "dep:sgx-dcap-quoteverify-sys"]
+verifier-sgx-dcap = ["dep:intel-tee-quote-verification-rs"]
+attester-tdx = ["dep:tdx-attest-rs"]
+verifier-tdx = ["dep:intel-tee-quote-verification-rs"]
 
 [dev-dependencies]
 clap = {version = "4.5.4", features = ["derive"]}
 env_logger = {version = "0.11.2", features = ["auto-color", "humantime", "regex"]}
 rayon = "1.10.0"
 rand = {version = "0.8.5", features = ["small_rng"]}
+
+[build-dependencies]
+bindgen = "0.65.1"
 
 [[example]]
 name = "spdm"

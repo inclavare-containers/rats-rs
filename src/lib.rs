@@ -4,9 +4,9 @@
 // To suppress warning messages appearing in recent nightly rust. See https://github.com/rust-lang/rust/issues/121315
 #![allow(unused_imports)]
 
-mod cert;
+pub mod cert;
 mod crypto;
-mod errors;
+pub mod errors;
 pub mod tee;
 pub mod transport;
 

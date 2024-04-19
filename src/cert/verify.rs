@@ -27,10 +27,12 @@ pub enum VerifyPolicyOutput {
     Failed,
 }
 
+#[allow(dead_code)]
 pub struct CertVerifier {
     policy: VerifiyPolicy,
 }
 
+#[allow(dead_code)]
 impl CertVerifier {
     fn new(policy: VerifiyPolicy) -> Self {
         Self { policy }

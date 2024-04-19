@@ -1,13 +1,18 @@
-#[cfg(feature = "attester-sgx-dcap")]
+use std::path::Path;
+
+#[cfg(feature = "attester-tdx")]
 pub mod attester;
 pub mod claims;
 pub mod evidence;
-#[cfg(feature = "verifier-sgx-dcap")]
+#[cfg(feature = "verifier-tdx")]
 pub mod verifier;
 
 pub fn detect_env() -> bool {
-    /* We only support occlum now */
-    if cfg!(feature = "attester-sgx-dcap-occlum") && std::env::var("OCCLUM").is_ok() {
+    if cfg!(feature = "attester-tdx")
+        && (Path::new("/dev/tdx-attest").exists()
+            || Path::new("/dev/tdx-guest").exists()
+            || Path::new("/dev/tdx_guest").exists())
+    {
         return true;
     }
     return false;
@@ -24,23 +29,26 @@ pub mod tests {
         },
     };
     use tests::{
-        attester::SgxDcapAttester,
-        claims::{BUILT_IN_CLAIM_SGX_MR_ENCLAVE, BUILT_IN_CLAIM_SGX_MR_SIGNER},
-        verifier::SgxDcapVerifier,
+        attester::TdxAttester,
+        claims::{
+            BUILT_IN_CLAIM_TDX_MR_TD, BUILT_IN_CLAIM_TDX_RT_MR0, BUILT_IN_CLAIM_TDX_RT_MR1,
+            BUILT_IN_CLAIM_TDX_RT_MR2, BUILT_IN_CLAIM_TDX_RT_MR3,
+        },
+        verifier::TdxVerifier,
     };
 
     #[test]
     fn test_attester_and_verifier() -> Result<()> {
-        if TeeType::detect_env() != Some(TeeType::SgxDcap) {
+        if TeeType::detect_env() != Some(TeeType::Tdx) {
             /* skip */
             return Ok(());
         }
 
         let report_data = b"test_report_data";
-        let attester = SgxDcapAttester::new();
+        let attester = TdxAttester::new();
         let evidence = attester.get_evidence(report_data)?;
-        assert_eq!(evidence.get_tee_type(), TeeType::SgxDcap);
-        let verifier = SgxDcapVerifier::new();
+        assert_eq!(evidence.get_tee_type(), TeeType::Tdx);
+        let verifier = TdxVerifier::new();
         assert_eq!(verifier.verify_evidence(&evidence, report_data), Ok(()));
 
         let claims = evidence.get_claims()?;
@@ -48,13 +56,15 @@ pub mod tests {
 
         assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_QUOTE));
         assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_QUOTE_TYPE));
-        assert!(claims.contains_key(BUILT_IN_CLAIM_SGX_MR_ENCLAVE));
-        assert!(claims.contains_key(BUILT_IN_CLAIM_SGX_MR_SIGNER));
-
+        assert!(claims.contains_key(BUILT_IN_CLAIM_TDX_MR_TD));
+        assert!(claims.contains_key(BUILT_IN_CLAIM_TDX_RT_MR0));
+        assert!(claims.contains_key(BUILT_IN_CLAIM_TDX_RT_MR1));
+        assert!(claims.contains_key(BUILT_IN_CLAIM_TDX_RT_MR2));
+        assert!(claims.contains_key(BUILT_IN_CLAIM_TDX_RT_MR3));
 
         assert_eq!(
             claims.get(BUILT_IN_CLAIM_COMMON_QUOTE_TYPE),
-            Some(&"sgx_dcap".as_bytes().into())
+            Some(&"tdx".as_bytes().into())
         );
         Ok(())
     }

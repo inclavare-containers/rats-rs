@@ -3,27 +3,27 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::errors::*;
-use crate::tee::sgx_dcap::evidence::SgxDcapEvidence;
+use super::evidence::TdxEvidence;
 use crate::tee::GenericVerifier;
+use crate::{errors::*, tee::intel_dcap::sgx_report_data_t};
 
-use log::{debug, warn};
-use sgx_dcap_quoteverify_rs::{
+use intel_tee_quote_verification_rs::{
     sgx_ql_qv_result_t, sgx_ql_qv_supplemental_t, tee_get_supplemental_data_version_and_size,
     tee_qv_get_collateral, tee_supp_data_descriptor_t, tee_verify_quote,
 };
+use log::{debug, warn};
 
 #[derive(Debug, Default)]
-pub struct SgxDcapVerifier {}
+pub struct TdxVerifier {}
 
-impl SgxDcapVerifier {
+impl TdxVerifier {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl GenericVerifier for SgxDcapVerifier {
-    type Evidence = SgxDcapEvidence;
+impl GenericVerifier for TdxVerifier {
+    type Evidence = TdxEvidence;
 
     fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()> {
         /* Verify quote with intel sgx trsut chain */
@@ -31,12 +31,12 @@ impl GenericVerifier for SgxDcapVerifier {
             .context("Evidence's identity verification error.")?;
 
         /* Check report data */
-        let quote = evidence.as_quote();
-        let mut extended = sgx_dcap_quoteverify_sys::sgx_report_data_t::default();
+        let mut extended = sgx_report_data_t::default();
         extended.d[..report_data.len()].clone_from_slice(report_data);
-        if quote.report_body.report_data.d != extended.d {
+        let report_data_from_quote = evidence.get_report_data_field()?;
+        if report_data_from_quote != extended.d {
             Err(Error::kind_with_msg(
-                ErrorKind::SgxDcapVerifierReportDataMismatch,
+                ErrorKind::TdxVerifierReportDataMismatch,
                 "report data mismatch",
             ))?;
         }
@@ -70,7 +70,7 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
             }
         }
         Err(e) => Err(Error::kind_with_msg(
-            ErrorKind::SgxDcapVerifierGetSupplementalDataFailed,
+            ErrorKind::TdxVerifierGetSupplementalDataFailed,
             format!(
                 "tee_get_quote_supplemental_data_size failed: {:#04x}",
                 e as u32
@@ -103,15 +103,19 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
     };
 
     // call DCAP quote verify library for quote verification
-    let (collateral_expiration_status, quote_verification_result) =
-        tee_verify_quote(quote, p_collateral, current_time, None, p_supplemental_data).map_err(
-            |e| {
-                Error::kind_with_msg(
-                    ErrorKind::SgxDcapVerifierVerifyQuoteFailed,
-                    format!("tee_verify_quote failed: {:#04x}", e as u32),
-                )
-            },
-        )?;
+    let (collateral_expiration_status, quote_verification_result) = tee_verify_quote(
+        quote,
+        p_collateral.as_ref(),
+        current_time,
+        None,
+        p_supplemental_data,
+    )
+    .map_err(|e| {
+        Error::kind_with_msg(
+            ErrorKind::TdxVerifierVerifyQuoteFailed,
+            format!("tee_verify_quote failed: {:#04x}", e as u32),
+        )
+    })?;
 
     debug!("tee_verify_quote successfully returned.");
 
@@ -138,7 +142,7 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
         }
         _ => {
             Err(Error::kind_with_msg(
-                ErrorKind::SgxDcapVerifierVerifyQuoteFailed,
+                ErrorKind::TdxVerifierVerifyQuoteFailed,
                 format!(
                     "Verification completed with Terminal result: {:x}",
                     quote_verification_result as u32

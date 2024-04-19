@@ -24,20 +24,9 @@ impl CertValidationStrategy for RatsCertValidationStrategy {
         match crate::cert::verify::verify_cert_der(cert_chain) {
             Ok(claims) => {
                 // TODO: check BUILT_IN_CLAIM_SGX_MR_ENCLAVE etc.
-                info!(
-                    "{}:\t{}",
-                    crate::tee::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE,
-                    hex::encode(
-                        &claims[crate::tee::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_ENCLAVE]
-                    ),
-                );
-                info!(
-                    "{}:\t{}",
-                    crate::tee::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER,
-                    hex::encode(
-                        &claims[crate::tee::sgx_dcap::claims::BUILT_IN_CLAIM_SGX_MR_SIGNER]
-                    ),
-                );
+                claims.iter().for_each(|(k, v)| {
+                    info!("{}:\t{}", k, hex::encode(&v),);
+                });
                 Ok(())
             }
             Err(e) => {
