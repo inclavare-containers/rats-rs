@@ -1,11 +1,11 @@
 use crate::cert::dice::cbor::OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT;
 use crate::errors::*;
 use crate::tee::claims::Claims;
+use crate::tee::intel_dcap::{sgx_quote3_t, sgx_quote4_header_t};
 use crate::{
     cert::dice::cbor::OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE,
     tee::{GenericEvidence, TeeType},
 };
-use sgx_dcap_quoteverify_sys::sgx_quote3_t;
 
 /// This `SgxDcapEvidence` struct Represents an SGX DCAP quote of version 3
 ///
@@ -24,28 +24,55 @@ impl SgxDcapEvidence {
     }
 
     pub fn new_from_unchecked(unchecked_quote: &[u8]) -> Result<Self> {
-        /* Check data length to avoid memory security risk */
-        if unchecked_quote.len() < std::mem::size_of::<sgx_quote3_t>() {
-            Err(Error::kind_with_msg(
+        if unchecked_quote.len() < std::mem::size_of::<sgx_quote4_header_t>() {
+            return Err(Error::kind_with_msg(
                 ErrorKind::SgxDcapMulformedQuote,
                 format!(
-                    "evidence too short, unchecked_quote.len(): {}",
+                    "Invalid quote: quote length {} is too short",
                     unchecked_quote.len()
                 ),
-            ))?;
+            ));
         }
 
-        let quote = unsafe { &*(unchecked_quote.as_ptr() as *const sgx_quote3_t) };
-        let expected_quote_len =
-            std::mem::size_of::<sgx_quote3_t>() + quote.signature_data_len as usize;
-        if unchecked_quote.len() != expected_quote_len {
-            Err(Error::kind_with_msg(
-                ErrorKind::SgxDcapMulformedQuote,
+        let header = unsafe { &*(unchecked_quote.as_ptr() as *const sgx_quote4_header_t) };
+        if (header.version == 3 && (header.att_key_type == 2 || header.att_key_type == 3))
+            || ((header.version == 4 || header.version == 5) && header.tee_type == 0)
+        {
+            if unchecked_quote.len() < std::mem::size_of::<sgx_quote3_t>() {
+                Err(Error::kind_with_msg(
+                    ErrorKind::SgxDcapMulformedQuote,
+                    format!(
+                        "Invalid quote: quote length {} is too short",
+                        unchecked_quote.len()
+                    ),
+                ))?;
+            }
+
+            let quote = unsafe { &*(unchecked_quote.as_ptr() as *const sgx_quote3_t) };
+            let expected_quote_len =
+                std::mem::size_of::<sgx_quote3_t>() + quote.signature_data_len as usize;
+            if unchecked_quote.len() != expected_quote_len {
+                Err(Error::kind_with_msg(
+                    ErrorKind::SgxDcapMulformedQuote,
+                    format!(
+                        "Invalid SGX DCAP quote version 3: quote length mismatch and probably got truncated, unchecked_quote.len(): {}, expected: {}",
+                        unchecked_quote.len(), expected_quote_len
+                    ),
+                ))?;
+            }
+            // TODO: support version 4 and version 5
+        } else {
+            let version = header.version;
+            let att_key_type = header.att_key_type;
+            let tee_type = header.tee_type;
+
+            return Err(Error::kind_with_msg(
+                ErrorKind::SgxDcapUnsupportedEvidenceType,
                 format!(
-                    "evidence length mismatch and probably got truncated, unchecked_quote.len(): {}, expected: {}",
-                    unchecked_quote.len(), expected_quote_len
+                    "Unsupported quote type, version: {:02x}, att_key_type: {:02x}, tee_type: {:02x}",
+                    version, att_key_type, tee_type
                 ),
-            ))?;
+            ));
         }
 
         Ok(Self {
@@ -99,46 +126,7 @@ pub(crate) fn create_evidence_from_dice(
     raw_evidence: &[u8],
 ) -> Option<Result<SgxDcapEvidence>> {
     if cbor_tag == OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE {
-        /* Use a simplified header structure to distinguish between SGX (EPID and ECDSA) and TDX (ECDSA) quote types.
-         * See: https://github.com/intel/SGXDataCenterAttestationPrimitives/blob/cd27223301e7c2bc80c9c5084ad6f5c2b9d24f5c/QuoteGeneration/quote_wrapper/common/inc/sgx_quote_4.h#L111-L120
-         */
-        #[repr(C, packed)]
-        #[derive(Debug, Default, Copy, Clone)]
-        #[allow(non_camel_case_types)]
-        pub struct sgx_quote_header_part_t {
-            pub version: u16,
-            pub att_key_type: u16,
-            pub tee_type: u32,
-        }
-
-        if raw_evidence.len() < std::mem::size_of::<sgx_quote_header_part_t>() {
-            return Some(Err(Error::kind_with_msg(
-                ErrorKind::SgxDcapMulformedQuote,
-                format!(
-                    "Invalid quote: quote length {} is too short",
-                    raw_evidence.len()
-                ),
-            )));
-        }
-
-        let header = unsafe { &*(raw_evidence.as_ptr() as *const sgx_quote_header_part_t) };
-        if (header.version == 3 && (header.att_key_type == 2 || header.att_key_type == 3))
-            || ((header.version == 4 || header.version == 5) && header.tee_type == 0)
-        {
-            return Some(SgxDcapEvidence::new_from_unchecked(raw_evidence));
-        } else {
-            let version = header.version;
-            let att_key_type = header.att_key_type;
-            let tee_type = header.tee_type;
-
-            return Some(Err(Error::kind_with_msg(
-                ErrorKind::SgxDcapUnsupportedEvidenceType,
-                format!(
-                    "Unsupported quote type, version: {:02x}, att_key_type: {:02x}, tee_type: {:02x}",
-                    version, att_key_type, tee_type
-                ),
-            )));
-        }
+        return Some(SgxDcapEvidence::new_from_unchecked(raw_evidence));
     } else if cbor_tag == OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT {
         return Some(Err(Error::kind_with_msg(
             ErrorKind::SgxDcapUnsupportedEvidenceType,

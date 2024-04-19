@@ -1,6 +1,6 @@
 use crate::errors::*;
 use crate::tee::claims::Claims;
-use sgx_dcap_quoteverify_sys::sgx_quote3_t;
+use crate::tee::intel_dcap::sgx_quote3_t;
 
 /* SGX built-in claims */
 /* Refer to: https://github.com/intel/linux-sgx/blob/a1eeccba5a72b3b9b342569d2cc469ece106d3e9/common/inc/sgx_report.h#L93-L111 */

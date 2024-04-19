@@ -1,16 +1,15 @@
+use crate::errors::*;
+use crate::tee::intel_dcap::sgx_report_data_t;
+use crate::tee::sgx_dcap::evidence::SgxDcapEvidence;
+use crate::tee::GenericVerifier;
+use intel_tee_quote_verification_rs::{
+    sgx_ql_qv_result_t, sgx_ql_qv_supplemental_t, tee_get_supplemental_data_version_and_size,
+    tee_qv_get_collateral, tee_supp_data_descriptor_t, tee_verify_quote,
+};
+use log::{debug, warn};
 use std::{
     mem,
     time::{Duration, SystemTime},
-};
-
-use crate::errors::*;
-use crate::tee::sgx_dcap::evidence::SgxDcapEvidence;
-use crate::tee::GenericVerifier;
-
-use log::{debug, warn};
-use sgx_dcap_quoteverify_rs::{
-    sgx_ql_qv_result_t, sgx_ql_qv_supplemental_t, tee_get_supplemental_data_version_and_size,
-    tee_qv_get_collateral, tee_supp_data_descriptor_t, tee_verify_quote,
 };
 
 #[derive(Debug, Default)]
@@ -32,7 +31,7 @@ impl GenericVerifier for SgxDcapVerifier {
 
         /* Check report data */
         let quote = evidence.as_quote();
-        let mut extended = sgx_dcap_quoteverify_sys::sgx_report_data_t::default();
+        let mut extended = sgx_report_data_t::default();
         extended.d[..report_data.len()].clone_from_slice(report_data);
         if quote.report_body.report_data.d != extended.d {
             Err(Error::kind_with_msg(
@@ -103,15 +102,19 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
     };
 
     // call DCAP quote verify library for quote verification
-    let (collateral_expiration_status, quote_verification_result) =
-        tee_verify_quote(quote, p_collateral, current_time, None, p_supplemental_data).map_err(
-            |e| {
-                Error::kind_with_msg(
-                    ErrorKind::SgxDcapVerifierVerifyQuoteFailed,
-                    format!("tee_verify_quote failed: {:#04x}", e as u32),
-                )
-            },
-        )?;
+    let (collateral_expiration_status, quote_verification_result) = tee_verify_quote(
+        quote,
+        p_collateral.as_ref(),
+        current_time,
+        None,
+        p_supplemental_data,
+    )
+    .map_err(|e| {
+        Error::kind_with_msg(
+            ErrorKind::SgxDcapVerifierVerifyQuoteFailed,
+            format!("tee_verify_quote failed: {:#04x}", e as u32),
+        )
+    })?;
 
     debug!("tee_verify_quote successfully returned.");
 
