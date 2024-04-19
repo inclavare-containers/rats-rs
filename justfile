@@ -3,6 +3,10 @@ set shell := ["bash", "-uc"]
 default:
   just --list
 
+prepare-repo:
+  git submodule update --init --recursive
+  cd deps/spdm-rs && sh_script/pre-build.sh
+
 run-in-occlum *args:
   cargo build --example spdm
   scripts/run_exe_in_occlum.sh target/debug/examples/spdm {{args}}

@@ -142,16 +142,21 @@ docker build --tag rats-rs:master .
     ```sh
     git clone git@github.com:imlk0/rats-rs.git
     cd rats-rs
-    git submodule update --init --recursive
     ```
 
-2. 构建项目
+2. 准备
+
+    ```sh
+    just prepare-repo
+    ```
+
+3. 构建项目
 
     ```sh
     cargo build
     ```
 
-3. （可选）构建样例程序
+4. （可选）构建样例程序
 
     ```sh
     cargo build --example spdm

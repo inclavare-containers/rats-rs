@@ -42,7 +42,8 @@ rats-rs是一个纯Rust实现的TEE远程证明库，它的最终目标是让开
     ```sh
     git clone git@github.com:imlk0/rats-rs.git
     cd rats-rs
-    git submodule update --init --recursive
+    
+    just prepare-repo
 
     cargo build --example spdm
     ```
@@ -86,7 +87,7 @@ rats-rs = {git = "https://github.com/imlk0/rats-rs", branch = "master"}
 
 大部分文档都归类在[docs](/docs/)目录下，这里列举出一些相对重要的文档，方便开始接触本项目。
 
-- [环境搭建指引](/docs/how-to-build.md)
+- [环境搭建与项目构建指引](/docs/how-to-build.md)
 - [测试指引与代码覆盖率](/docs/how-to-run-test.md)
 - [项目整体架构与模块功能描述](/docs/architecture-of-the-project.md)
 - [CPU-SPDM协议核心设计思路](/docs/core-design-of-cpu-spdm.md)
