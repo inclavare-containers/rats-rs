@@ -86,15 +86,23 @@ impl TdxEvidence {
             let tee_report_type = quote.type_;
             if tee_report_type == 2 {
                 /* quote5 with TDX 1.0 */
-                if unchecked_quote.len()
-                    != std::mem::offset_of!(sgx_quote5_t, body) + (quote.size as usize)
-                    || (quote.size as usize)
-                        < std::mem::size_of::<sgx_report2_body_t>() + std::mem::size_of::<u32>()
-                    || (quote.size as usize)
-                        != std::mem::size_of::<sgx_report2_body_t>()
+                if std::mem::size_of::<sgx_report2_body_t>() != (quote.size as usize)
+                    || unchecked_quote.len()
+                        < std::mem::offset_of!(sgx_quote5_t, body)
+                            + std::mem::size_of::<sgx_report2_body_t>()
+                            + std::mem::size_of::<u32>()
+                    || unchecked_quote.len()
+                        != std::mem::offset_of!(sgx_quote5_t, body)
+                            + std::mem::size_of::<sgx_report2_body_t>()
                             + std::mem::size_of::<u32>()
                             + unsafe {
-                                core::ptr::read_unaligned(quote.body.as_ptr() as *const u32)
+                                core::ptr::read_unaligned(
+                                    quote
+                                        .body
+                                        .as_ptr()
+                                        .byte_add(std::mem::size_of::<sgx_report2_body_t>())
+                                        as *const u32,
+                                )
                             } as usize
                 {
                     /* sgx_report2_body_t + (uint32_t)signature_data_len + signature */
@@ -105,16 +113,23 @@ impl TdxEvidence {
                 }
             } else if tee_report_type == 3 {
                 /* quote5 with TDX 1.5 */
-                if unchecked_quote.len()
-                    != std::mem::offset_of!(sgx_quote5_t, body) + (quote.size as usize)
-                    || (quote.size as usize)
-                        < std::mem::size_of::<sgx_report2_body_v1_5_t>()
+                if std::mem::size_of::<sgx_report2_body_v1_5_t>() != (quote.size as usize)
+                    || unchecked_quote.len()
+                        < std::mem::offset_of!(sgx_quote5_t, body)
+                            + std::mem::size_of::<sgx_report2_body_v1_5_t>()
                             + std::mem::size_of::<u32>()
-                    || (quote.size as usize)
-                        != std::mem::size_of::<sgx_report2_body_v1_5_t>()
+                    || unchecked_quote.len()
+                        != std::mem::offset_of!(sgx_quote5_t, body)
+                            + std::mem::size_of::<sgx_report2_body_v1_5_t>()
                             + std::mem::size_of::<u32>()
                             + unsafe {
-                                core::ptr::read_unaligned(quote.body.as_ptr() as *const u32)
+                                core::ptr::read_unaligned(
+                                    quote
+                                        .body
+                                        .as_ptr()
+                                        .byte_add(std::mem::size_of::<sgx_report2_body_v1_5_t>())
+                                        as *const u32,
+                                )
                             } as usize
                 {
                     /* sgx_report2_body_v1_5_t + (uint32_t)signature_data_len + signature */
