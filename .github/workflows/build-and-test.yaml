@@ -22,7 +22,7 @@ jobs:
 
       - name: Prepare repo
         run:
-          just prepare-repo
+          git config --global --add safe.directory `pwd` && just prepare-repo
         env:
           HOME: /root
 
