@@ -1,7 +1,7 @@
 use crate::cert::dice::cbor::OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT;
 use crate::errors::*;
 use crate::tee::claims::Claims;
-use crate::tee::intel_dcap::{sgx_quote3_t, sgx_quote4_header_t};
+use intel_dcap::{sgx_quote3_t, sgx_quote4_header_t};
 use crate::{
     cert::dice::cbor::OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE,
     tee::{GenericEvidence, TeeType},

@@ -10,16 +10,6 @@ pub mod sgx_dcap;
 #[cfg(any(feature = "attester-tdx", feature = "verifier-tdx"))]
 pub mod tdx;
 
-#[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap", feature = "attester-tdx", feature = "verifier-tdx"))]
-pub(crate) mod intel_dcap{
-    #![allow(non_upper_case_globals)]
-    #![allow(non_camel_case_types)]
-    #![allow(non_snake_case)]
-    #![allow(dead_code)]
-    
-    include!(concat!(env!("OUT_DIR"), "/sgx_dcap_bindings.rs"));
-}
-
 /// Trait representing generic evidence.
 pub trait GenericEvidence: Any {
     /// Return the CBOR tag used for generating DICE cert.

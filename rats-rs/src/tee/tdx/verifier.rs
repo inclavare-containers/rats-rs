@@ -4,9 +4,9 @@ use std::{
 };
 
 use super::evidence::TdxEvidence;
+use crate::errors::*;
 use crate::tee::GenericVerifier;
-use crate::{errors::*, tee::intel_dcap::sgx_report_data_t};
-
+use intel_dcap::sgx_report_data_t;
 use intel_tee_quote_verification_rs::{
     sgx_ql_qv_result_t, sgx_ql_qv_supplemental_t, tee_get_supplemental_data_version_and_size,
     tee_qv_get_collateral, tee_supp_data_descriptor_t, tee_verify_quote,

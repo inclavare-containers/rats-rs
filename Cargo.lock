@@ -794,6 +794,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "intel-dcap"
+version = "0.1.0"
+dependencies = [
+ "bindgen 0.65.1",
+]
+
+[[package]]
 name = "intel-tee-quote-verification-rs"
 version = "0.3.0"
 source = "git+https://github.com/intel/SGXDataCenterAttestationPrimitives?tag=DCAP_1.20#621a0850fccf531a8d8131f9293a760925f55730"
@@ -1193,7 +1200,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "bindgen 0.65.1",
  "bitflags 2.5.0",
  "bstr",
  "bytes",
@@ -1203,6 +1209,7 @@ dependencies = [
  "env_logger 0.11.2",
  "hex",
  "indexmap",
+ "intel-dcap",
  "intel-tee-quote-verification-rs",
  "itertools",
  "log",

@@ -37,6 +37,7 @@ bstr = "1.9.1"
 itertools = "0.12.1"
 indexmap = {version = "2.2.6", features = ["std", "serde"]}
 tdx-attest-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
+intel-dcap = {path = "../intel-dcap", optional = true}
 
 [features]
 async-tokio = ["dep:tokio"]
@@ -44,16 +45,13 @@ crypto-rustcrypto = ["dep:x509-cert", "dep:sha2", "dep:p256", "dep:rsa", "dep:pk
 default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "verifier-sgx-dcap", "attester-tdx", "verifier-tdx", "is-sync"]
 is-sync = ["maybe-async/is_sync", "spdmlib/is_sync"]
 transport-spdm = ["dep:spdmlib", "dep:codec", "dep:ring"]
-attester-sgx-dcap = []
+attester-sgx-dcap = ["dep:intel-dcap"]
 attester-sgx-dcap-occlum = ["attester-sgx-dcap", "dep:occlum_dcap"]
 attester-sgx-dcap-enclave = [] # TODO: plain enclave mode
-verifier-sgx-dcap = ["dep:intel-tee-quote-verification-rs"]
-attester-tdx = ["dep:tdx-attest-rs"]
-verifier-tdx = ["dep:intel-tee-quote-verification-rs"]
+verifier-sgx-dcap = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
+attester-tdx = ["dep:tdx-attest-rs", "dep:intel-dcap"]
+verifier-tdx = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
 
 [dev-dependencies]
 rayon = "1.10.0"
 env_logger = {workspace = true}
-
-[build-dependencies]
-bindgen = "0.65.1"

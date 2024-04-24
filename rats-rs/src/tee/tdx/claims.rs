@@ -1,8 +1,8 @@
 use super::evidence::{Quote, TdxEvidence};
 use crate::errors::*;
 use crate::tee::claims::Claims;
-use crate::tee::intel_dcap::sgx_report2_body_t;
-use crate::tee::intel_dcap::sgx_report2_body_v1_5_t;
+use intel_dcap::sgx_report2_body_t;
+use intel_dcap::sgx_report2_body_v1_5_t;
 
 /* TDX built-in claims */
 /* Refer to: https://github.com/intel/SGXDataCenterAttestationPrimitives/blob/cd27223301e7c2bc80c9c5084ad6f5c2b9d24f5c/QuoteGeneration/quote_wrapper/common/inc/sgx_quote_4.h#L123-L137 */

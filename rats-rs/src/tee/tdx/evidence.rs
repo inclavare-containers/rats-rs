@@ -3,7 +3,7 @@ use log::error;
 use crate::cert::dice::cbor::OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT;
 use crate::errors::*;
 use crate::tee::claims::Claims;
-use crate::tee::intel_dcap::{
+use intel_dcap::{
     sgx_quote4_header_t, sgx_quote4_t, sgx_quote5_t, sgx_report2_body_t, sgx_report2_body_v1_5_t,
 };
 use crate::{

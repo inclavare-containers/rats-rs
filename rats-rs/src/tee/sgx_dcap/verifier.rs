@@ -1,5 +1,5 @@
 use crate::errors::*;
-use crate::tee::intel_dcap::sgx_report_data_t;
+use intel_dcap::sgx_report_data_t;
 use crate::tee::sgx_dcap::evidence::SgxDcapEvidence;
 use crate::tee::GenericVerifier;
 use intel_tee_quote_verification_rs::{

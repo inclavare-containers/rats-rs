@@ -8,7 +8,6 @@ const SGX_BINDGEN_HEADER: &'static str = "
 #include <sgx_quote_5.h>
 ";
 
-#[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap", feature = "attester-tdx", feature = "verifier-tdx"))]
 fn main() {
     let mut builder = bindgen::Builder::default();
 

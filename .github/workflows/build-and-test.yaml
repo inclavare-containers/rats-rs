@@ -28,7 +28,7 @@ jobs:
 
       - name: Compile ${{ github.repository }}
         run:
-          cargo build
+          cargo build && cargo build --bin spdm
         env:
           HOME: /root
 
