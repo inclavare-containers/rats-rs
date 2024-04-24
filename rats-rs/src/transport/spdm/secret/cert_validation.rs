@@ -69,9 +69,9 @@ pub mod tests {
             };
 
             let ca_cert = if self.use_ecdsa {
-                &include_bytes!("../../../../deps/spdm-rs/test_key/ecp384/ca.cert.der")[..]
+                &include_bytes!("../../../../../deps/spdm-rs/test_key/ecp384/ca.cert.der")[..]
             } else {
-                &include_bytes!("../../../../deps/spdm-rs/test_key/rsa3072/ca.cert.der")[..]
+                &include_bytes!("../../../../../deps/spdm-rs/test_key/rsa3072/ca.cert.der")[..]
             };
             let ca_len = ca_cert.len();
             peer_root_cert_data.data_size = (ca_len) as u16;

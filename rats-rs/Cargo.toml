@@ -1,0 +1,59 @@
+[package]
+name = "rats-rs"
+authors = ["Kun Lai <me@imlk.top>"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = {workspace = true}
+async-trait = "0.1.77"
+bitflags = "2.5.0"
+bytes = "1.5.0"
+ciborium = "0.2.2"
+codec = {workspace = true, optional = true}
+const-oid = {version = "0.9.6", optional = true}
+hex = "0.4.3"
+log = {workspace = true}
+maybe-async = "0.2.7"
+occlum_dcap = {git = "https://github.com/occlum/occlum", tag = "v0.29.7", optional = true}
+p256 = {version = "0.13.2", optional = true}
+pkcs8 = {version = "0.10.2", features = ["pem"], optional = true}
+rand = "0.8.5"
+ring = {workspace = true, optional = true}
+rsa = {version = "0.9.6", features = ["sha2"], optional = true}
+serde = {version = "1.0", features = ["derive"]}
+serde_bytes = "0.11.14"
+intel-tee-quote-verification-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
+sha2 = {version = "0.10.8", features = ["oid"], optional = true}
+signature = {version = "2.2.0", optional = true}
+spdmlib = {workspace = true, optional = true}
+spin = {workspace = true}
+thiserror = "1.0.56"
+tokio = {version = "1.36.0", features = ["full"], optional = true}
+x509-cert = {version = "0.2.5", features = ["builder"], optional = true}
+zeroize = "1.7.0"
+bstr = "1.9.1"
+itertools = "0.12.1"
+indexmap = {version = "2.2.6", features = ["std", "serde"]}
+tdx-attest-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
+
+[features]
+async-tokio = ["dep:tokio"]
+crypto-rustcrypto = ["dep:x509-cert", "dep:sha2", "dep:p256", "dep:rsa", "dep:pkcs8", "dep:const-oid", "dep:signature"]
+default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "verifier-sgx-dcap", "attester-tdx", "verifier-tdx", "is-sync"]
+is-sync = ["maybe-async/is_sync", "spdmlib/is_sync"]
+transport-spdm = ["dep:spdmlib", "dep:codec", "dep:ring"]
+attester-sgx-dcap = []
+attester-sgx-dcap-occlum = ["attester-sgx-dcap", "dep:occlum_dcap"]
+attester-sgx-dcap-enclave = [] # TODO: plain enclave mode
+verifier-sgx-dcap = ["dep:intel-tee-quote-verification-rs"]
+attester-tdx = ["dep:tdx-attest-rs"]
+verifier-tdx = ["dep:intel-tee-quote-verification-rs"]
+
+[dev-dependencies]
+rayon = "1.10.0"
+env_logger = {workspace = true}
+
+[build-dependencies]
+bindgen = "0.65.1"

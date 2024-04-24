@@ -58,30 +58,30 @@ pub mod tests {
             };
 
             let ca_cert = if self.use_ecdsa {
-                &include_bytes!("../../../../deps/spdm-rs/test_key/ecp384/ca.cert.der")[..]
+                &include_bytes!("../../../../../deps/spdm-rs/test_key/ecp384/ca.cert.der")[..]
             } else {
-                &include_bytes!("../../../../deps/spdm-rs/test_key/rsa3072/ca.cert.der")[..]
+                &include_bytes!("../../../../../deps/spdm-rs/test_key/rsa3072/ca.cert.der")[..]
             };
             let inter_cert = if self.use_ecdsa {
-                &include_bytes!("../../../../deps/spdm-rs/test_key/ecp384/inter.cert.der")[..]
+                &include_bytes!("../../../../../deps/spdm-rs/test_key/ecp384/inter.cert.der")[..]
             } else {
-                &include_bytes!("../../../../deps/spdm-rs/test_key/rsa3072/inter.cert.der")[..]
+                &include_bytes!("../../../../../deps/spdm-rs/test_key/rsa3072/inter.cert.der")[..]
             };
             let leaf_cert = match self.is_requester {
                 true => match self.use_ecdsa {
                     true => &include_bytes!(
-                        "../../../../deps/spdm-rs/test_key/ecp384/end_requester.cert.der"
+                        "../../../../../deps/spdm-rs/test_key/ecp384/end_requester.cert.der"
                     )[..],
                     false => &include_bytes!(
-                        "../../../../deps/spdm-rs/test_key/rsa3072/end_requester.cert.der"
+                        "../../../../../deps/spdm-rs/test_key/rsa3072/end_requester.cert.der"
                     )[..],
                 },
                 false => match self.use_ecdsa {
                     true => &include_bytes!(
-                        "../../../../deps/spdm-rs/test_key/ecp384/end_responder.cert.der"
+                        "../../../../../deps/spdm-rs/test_key/ecp384/end_responder.cert.der"
                     )[..],
                     false => &include_bytes!(
-                        "../../../../deps/spdm-rs/test_key/rsa3072/end_responder.cert.der"
+                        "../../../../../deps/spdm-rs/test_key/rsa3072/end_responder.cert.der"
                     )[..],
                 },
             };

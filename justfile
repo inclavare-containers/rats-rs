@@ -8,24 +8,24 @@ prepare-repo:
   cd deps/spdm-rs && sh_script/pre-build.sh
 
 run-in-occlum *args:
-  cargo build --example spdm
-  scripts/run_exe_in_occlum.sh target/debug/examples/spdm {{args}}
+  cargo build --bin spdm
+  scripts/run_exe_in_occlum.sh target/debug/spdm {{args}}
 
 run-in-host *args:
-  cargo build --example spdm
-  target/debug/examples/spdm {{args}}
+  cargo build --bin spdm
+  target/debug/spdm {{args}}
 
 run-test-in-occlum *args:
-  cargo test --no-run
-  test_bin=`cargo test --no-run 2>&1 | sed -n 's/.*Executable unittests [^(]* (\([^)]\+\).*/\1/p'` && echo "unittests executable path: $test_bin" && scripts/run_exe_in_occlum.sh $test_bin {{args}}
+  cargo test --lib rats-rs --no-run
+  test_bin=`cargo test --lib rats-rs --no-run 2>&1 | sed -n 's/.*Executable unittests [^(]* (\([^)]\+\).*/\1/p'` && echo "unittests executable path: $test_bin" && scripts/run_exe_in_occlum.sh $test_bin {{args}}
 
 run-test-in-host *args:
-  cargo test {{args}}
+  cargo test --lib rats-rs {{args}}
 
 code-coverage *args:
   rm -rf ./target-sbcc
-  RUSTFLAGS="-C instrument-coverage -Zcoverage-options=branch" cargo test --target-dir ./target-sbcc --no-run
-  set -x && test_bin=`RUSTFLAGS="-C instrument-coverage -Zcoverage-options=branch" cargo test --target-dir ./target-sbcc --no-run 2>&1 | sed -n 's/.*Executable unittests [^(]* (\([^)]\+\).*/\1/p'` && \
+  RUSTFLAGS="-C instrument-coverage -Zcoverage-options=branch" cargo test --lib rats-rs --target-dir ./target-sbcc --no-run
+  set -x && test_bin=`RUSTFLAGS="-C instrument-coverage -Zcoverage-options=branch" cargo test --lib rats-rs --target-dir ./target-sbcc --no-run 2>&1 | sed -n 's/.*Executable unittests [^(]* (\([^)]\+\).*/\1/p'` && \
     echo "unittests executable path: $test_bin" && \
     rm -rf ./target-sbcc/coverage/ && mkdir -p ./target-sbcc/coverage/ && \
     LLVM_PROFILE_FILE='./target-sbcc/coverage/cargo-test-host-%p-%m.profraw' $test_bin {{args}} && \

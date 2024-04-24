@@ -1,0 +1,15 @@
+[package]
+name = "spdm"
+authors = ["Kun Lai <me@imlk.top>"]
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rats-rs = {path = "../../rats-rs", features = ["is-sync"]}
+clap = {version = "4.5.4", features = ["derive"]}
+env_logger = {workspace = true}
+rand = {version = "0.8.5", features = ["small_rng"]}
+anyhow = {workspace = true}
+log = {workspace = true}

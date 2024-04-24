@@ -465,7 +465,7 @@ pub mod tests {
                 let stream = TcpStream::connect("127.0.0.1:2323")
                     .expect("Couldn't connect to the server...");
 
-                #[cfg(not(feature = "is_sync"))]
+                #[cfg(not(feature = "is-sync"))]
                 {
                     let rt = tokio::runtime::Runtime::new().unwrap();
                     rt.block_on(Box::pin(run_requester(
@@ -478,7 +478,7 @@ pub mod tests {
                     .unwrap();
                 }
 
-                #[cfg(feature = "is_sync")]
+                #[cfg(feature = "is-sync")]
                 {
                     run_requester(
                         test_dummy,
@@ -503,14 +503,14 @@ pub mod tests {
                 let (stream, _) = listener.accept().expect("Read stream error!");
                 println!("new connection!");
 
-                #[cfg(not(feature = "is_sync"))]
+                #[cfg(not(feature = "is-sync"))]
                 {
                     let rt = tokio::runtime::Runtime::new().unwrap();
                     rt.block_on(run_responder(test_dummy, stream, hash_algo, asym_algo))
                         .unwrap();
                 }
 
-                #[cfg(feature = "is_sync")]
+                #[cfg(feature = "is-sync")]
                 {
                     run_responder(test_dummy, stream, hash_algo, asym_algo).unwrap();
                 }

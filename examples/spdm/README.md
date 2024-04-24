@@ -11,10 +11,10 @@
 
 接下来，使用如下命令构建本样例程序
 ```sh
-cargo build --example spdm
+cargo build --bin spdm
 ```
 
-可以使用`target/debug/examples/spdm --help`命令查看该样例程序的命令行参数
+可以使用`target/debug/spdm --help`命令查看该样例程序的命令行参数
 ```txt
 Usage: spdm <COMMAND>
 

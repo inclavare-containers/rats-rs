@@ -5,7 +5,7 @@
             "type": "lldb",
             "request": "launch",
             "name": "Debug examples/spdm echo-server",
-            "program": "target/debug/examples/spdm",
+            "program": "target/debug/spdm",
             "args": ["echo-server", "--attest-self", "--listen-on-tcp", "127.0.0.1:8080"],
             "cwd": "${workspaceRoot}",
             "sourceLanguages": [
@@ -16,7 +16,7 @@
             "type": "lldb",
             "request": "launch",
             "name": "Debug examples/spdm echo-client",
-            "program": "target/debug/examples/spdm",
+            "program": "target/debug/spdm",
             "args": ["echo-client", "--verify-peer", "--connect-to-tcp", "127.0.0.1:8080"],
             "cwd": "${workspaceRoot}",
             "sourceLanguages": [
