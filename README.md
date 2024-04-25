@@ -1,5 +1,5 @@
 # rats-rs
-[![Testing](https://github.com/imlk0/rats-rs/actions/workflows/build-and-test.yaml/badge.svg)](https://github.com/imlk0/rats-rs/actions/workflows/build-and-test.yaml)
+[![Testing](/../../actions/workflows/build-and-test.yaml/badge.svg)](/../../actions/workflows/build-and-test.yaml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 
@@ -34,13 +34,13 @@ rats-rs是一个纯Rust实现的TEE远程证明库，它的最终目标是让开
 1. 首先准备rats-rs的构建环境，建议直接使用我们预构建的Docker容器
 
     ```sh
-    docker run -it --privileged --device=/dev/sgx_enclave --device=/dev/sgx_provision ghcr.io/imlk0/rats-rs:master bash
+    docker run -it --privileged --device=/dev/sgx_enclave --device=/dev/sgx_provision ghcr.io/inclavare-containers/rats-rs:master bash
     ```
 
 2. Clone代码并编译样例程序
     
     ```sh
-    git clone git@github.com:imlk0/rats-rs.git
+    git clone git@github.com:inclavare-containers/rats-rs.git
     cd rats-rs
     
     just prepare-repo
@@ -70,7 +70,7 @@ rats-rs是一个纯Rust实现的TEE远程证明库，它的最终目标是让开
 
 ```toml
 [dependencies]
-rats-rs = {git = "https://github.com/imlk0/rats-rs", branch = "master"}
+rats-rs = {git = "https://github.com/inclavare-containers/rats-rs", branch = "master"}
 ```
 
 要开始使用rats-rs的API，建议参考[示例程序](/examples/spdm/)。

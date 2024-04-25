@@ -69,12 +69,12 @@ Options:
 
 该示例同样包含server端和client端，分别对应示例程序`spdm`中的`tunnel-server`和`tunnel-client`这两个子命令。
 
-![tunnel](tunnel/tunnel.svg)
+![tunnel](src/tunnel/tunnel.svg)
 
 1. 在TDX实例中运行一个nginx服务，以模拟业务场景中，在TDX实例中运行的业务服务端程序。
 
     ```sh
-    nginx -c `realpath ./examples/spdm/tunnel/nginx.conf`
+    nginx -c `realpath ./examples/spdm/src/tunnel/nginx.conf`
     ```
 
     该nginx将监听在`9091`端口，并暴露一个nginx默认页。

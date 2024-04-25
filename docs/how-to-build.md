@@ -8,13 +8,13 @@
 本项目提供提供了以Docker容器形式的构建开发环境，可以使用如下命令拉取构建开发环境的镜像。
 
 ```sh
-docker pull ghcr.io/imlk0/rats-rs:master
+docker pull ghcr.io/inclavare-containers/rats-rs:master
 ```
 
 或者也可以直接以Dockerfile的形式构建
 
 ```sh
-git clone git@github.com:imlk0/rats-rs.git
+git clone git@github.com:inclavare-containers/rats-rs.git
 cd rats-rs
 docker build --tag rats-rs:master .
 ```
@@ -140,7 +140,7 @@ docker build --tag rats-rs:master .
 1. 拉取源码
     
     ```sh
-    git clone git@github.com:imlk0/rats-rs.git
+    git clone git@github.com:inclavare-containers/rats-rs.git
     cd rats-rs
     ```
 
