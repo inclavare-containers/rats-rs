@@ -4,7 +4,10 @@ members = [
     "intel-dcap",
     "examples/*",
 ]
-default-members = ["rats-rs"]
+default-members = [
+    "rats-rs",
+    "examples/*",
+]
 resolver = "2"
 
 [workspace.package]
