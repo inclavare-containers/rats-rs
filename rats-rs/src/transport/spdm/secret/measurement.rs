@@ -1,7 +1,3 @@
-// Copyright (c) 2021 Intel Corporation
-//
-// SPDX-License-Identifier: Apache-2.0 or MIT
-
 #![allow(dead_code)]
 #![allow(unused_variables)]
 use crate::cert::dice::cbor::generate_claims_buffer;

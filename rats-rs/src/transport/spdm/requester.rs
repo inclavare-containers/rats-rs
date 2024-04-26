@@ -1,7 +1,3 @@
-// Copyright (c) 2020 Intel Corporation
-//
-// SPDX-License-Identifier: Apache-2.0 or MIT
-
 #![forbid(unsafe_code)]
 
 use super::half::ReadHalf;

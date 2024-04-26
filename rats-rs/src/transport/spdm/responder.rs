@@ -1,7 +1,3 @@
-// Copyright (c) 2020 Intel Corporation
-//
-// SPDX-License-Identifier: Apache-2.0 or MIT
-
 use super::half::{ReadHalf, WriteHalf};
 use super::secret::asym_crypto::RatsSecretAsymSigner;
 use super::secret::cert_provider::{CertProvider, EmptyCertProvider, RatsCertProvider};
