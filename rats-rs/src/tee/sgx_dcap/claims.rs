@@ -41,8 +41,8 @@ pub fn gen_claims_from_quote(quote: &sgx_quote3_t) -> Result<Claims> {
         },
     );
     claims.insert(
-        crate::tee::claims::BUILT_IN_CLAIM_COMMON_QUOTE_TYPE.into(),
-        "sgx_dcap".as_bytes().into(),
+        crate::tee::claims::BUILT_IN_CLAIM_COMMON_TEE_TYPE.into(),
+        "sgx-dcap".as_bytes().into(),
     );
 
     /* sgx claims */

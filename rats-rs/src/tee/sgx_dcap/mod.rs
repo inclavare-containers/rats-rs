@@ -51,10 +51,9 @@ pub mod tests {
         assert!(claims.contains_key(BUILT_IN_CLAIM_SGX_MR_ENCLAVE));
         assert!(claims.contains_key(BUILT_IN_CLAIM_SGX_MR_SIGNER));
 
-
         assert_eq!(
-            claims.get(BUILT_IN_CLAIM_COMMON_QUOTE_TYPE),
-            Some(&"sgx_dcap".as_bytes().into())
+            claims.get(BUILT_IN_CLAIM_COMMON_TEE_TYPE),
+            Some(&"sgx-dcap".as_bytes().into())
         );
         Ok(())
     }
