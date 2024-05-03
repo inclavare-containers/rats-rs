@@ -43,6 +43,12 @@ jobs:
         env:
           HOME: /root
 
+      - name: Compile rats-rs (example/cert-app)
+        run:
+          cd examples/cert-app && rm -rf build && cmake -H. -Bbuild && make -Cbuild all
+        env:
+          HOME: /root
+
       - name: Run unit test ${{ github.repository }}
         run:
           just run-test-in-host
