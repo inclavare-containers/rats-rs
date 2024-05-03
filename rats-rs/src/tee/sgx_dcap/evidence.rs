@@ -1,11 +1,11 @@
 use crate::cert::dice::cbor::OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT;
 use crate::errors::*;
 use crate::tee::claims::Claims;
-use intel_dcap::{sgx_quote3_t, sgx_quote4_header_t};
 use crate::{
     cert::dice::cbor::OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE,
     tee::{GenericEvidence, TeeType},
 };
+use intel_dcap::{sgx_quote3_t, sgx_quote4_header_t};
 
 /// This `SgxDcapEvidence` struct Represents an SGX DCAP quote of version 3
 ///
@@ -17,13 +17,13 @@ pub struct SgxDcapEvidence {
 }
 
 impl SgxDcapEvidence {
-    pub(crate) fn new_from_checked(checked_quote: Vec<u8>) -> Result<Self> {
+    pub(crate) fn new_from_trusted(checked_quote: Vec<u8>) -> Result<Self> {
         Ok(Self {
             data: checked_quote,
         })
     }
 
-    pub fn new_from_unchecked(unchecked_quote: &[u8]) -> Result<Self> {
+    pub fn new_from_untrusted(unchecked_quote: &[u8]) -> Result<Self> {
         if unchecked_quote.len() < std::mem::size_of::<sgx_quote4_header_t>() {
             return Err(Error::kind_with_msg(
                 ErrorKind::SgxDcapMulformedQuote,
@@ -126,7 +126,7 @@ pub(crate) fn create_evidence_from_dice(
     raw_evidence: &[u8],
 ) -> Option<Result<SgxDcapEvidence>> {
     if cbor_tag == OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE {
-        return Some(SgxDcapEvidence::new_from_unchecked(raw_evidence));
+        return Some(SgxDcapEvidence::new_from_untrusted(raw_evidence));
     } else if cbor_tag == OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT {
         return Some(Err(Error::kind_with_msg(
             ErrorKind::SgxDcapUnsupportedEvidenceType,

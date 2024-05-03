@@ -31,7 +31,7 @@ pub fn gen_claims_from_quote(quote: &sgx_quote3_t) -> Result<Claims> {
 
     /* common claims */
     claims.insert(
-        crate::tee::claims::BUILT_IN_CLAIM_COMMON_QUOTE.into(),
+        crate::tee::claims::BUILT_IN_CLAIM_COMMON_EVIDENCE.into(),
         unsafe {
             core::slice::from_raw_parts(
                 quote as *const sgx_quote3_t as *const u8,

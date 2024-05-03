@@ -17,15 +17,21 @@ use pkcs8::spki::AlgorithmIdentifierOwned;
 use signature::Verifier;
 use x509_cert::Certificate;
 
+/// Represents the different verification policies that can be applied to certificates.
 pub enum VerifiyPolicy {
+    /// Verifies if the certificate contains a specific set of claims.
     Contains(Claims),
+    /// Enables the use of a custom verification function, providing flexibility for specialized validation logic.
     Custom(Box<dyn Fn(&Claims) -> VerifyPolicyOutput>),
 }
 
+/// Represents the outcome of a certificate verification.
 #[derive(PartialEq, Debug)]
 #[repr(C)]
 pub enum VerifyPolicyOutput {
+    /// Indicates the verification has failed.
     Failed,
+    /// Indicates the verification has passed successfully.
     Passed,
 }
 
@@ -246,7 +252,7 @@ pub mod tests {
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
         errors::*,
         tee::{
-            claims::{Claims, BUILT_IN_CLAIM_COMMON_QUOTE_TYPE},
+            claims::{Claims, BUILT_IN_CLAIM_COMMON_TEE_TYPE},
             AutoAttester, TeeType,
         },
     };
@@ -333,7 +339,7 @@ pub mod tests {
         /* Test verifiy cert with claims overriding */
         let mut claims = Claims::new();
         claims.insert(
-            BUILT_IN_CLAIM_COMMON_QUOTE_TYPE.into(),
+            BUILT_IN_CLAIM_COMMON_TEE_TYPE.into(),
             "test-tee-type".into(),
         ); /* Try to overriding the "common_quote_type" claim */
 

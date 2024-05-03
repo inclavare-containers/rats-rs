@@ -43,6 +43,6 @@ impl GenericAttester for TdxAttester {
             ))?;
         }
 
-        TdxEvidence::new_from_checked(quote.unwrap())
+        TdxEvidence::new_from_trusted(quote.unwrap())
     }
 }

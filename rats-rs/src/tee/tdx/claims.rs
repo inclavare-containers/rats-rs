@@ -193,11 +193,11 @@ impl TdxEvidence {
 
         /* common claims */
         claims.insert(
-            crate::tee::claims::BUILT_IN_CLAIM_COMMON_QUOTE.into(),
+            crate::tee::claims::BUILT_IN_CLAIM_COMMON_EVIDENCE.into(),
             self.as_quote_data().into(),
         );
         claims.insert(
-            crate::tee::claims::BUILT_IN_CLAIM_COMMON_QUOTE_TYPE.into(),
+            crate::tee::claims::BUILT_IN_CLAIM_COMMON_TEE_TYPE.into(),
             "tdx".as_bytes().into(),
         );
 

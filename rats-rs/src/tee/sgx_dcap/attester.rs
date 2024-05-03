@@ -42,7 +42,7 @@ impl GenericAttester for SgxDcapAttester {
                 .kind(ErrorKind::SgxDcapAttesterGenerateQuoteFailed)
                 .context("failed at generate_quote()")?;
 
-            SgxDcapEvidence::new_from_checked(occlum_quote)
+            SgxDcapEvidence::new_from_trusted(occlum_quote)
         } else {
             unreachable!()
         }

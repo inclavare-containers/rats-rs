@@ -209,7 +209,7 @@ impl GenericVerifier for AutoVerifier {
 
 #[cfg(test)]
 pub mod tests {
-    use tests::claims::{BUILT_IN_CLAIM_COMMON_QUOTE, BUILT_IN_CLAIM_COMMON_QUOTE_TYPE};
+    use tests::claims::{BUILT_IN_CLAIM_COMMON_EVIDENCE, BUILT_IN_CLAIM_COMMON_TEE_TYPE};
 
     use crate::errors::*;
 
@@ -232,8 +232,8 @@ pub mod tests {
         let claims = evidence.get_claims()?;
         println!("generated claims:\n{:?}", claims);
 
-        assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_QUOTE));
-        assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_QUOTE_TYPE));
+        assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_EVIDENCE));
+        assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_TEE_TYPE));
         
         Ok(())
     }

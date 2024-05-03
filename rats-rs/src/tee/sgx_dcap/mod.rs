@@ -19,7 +19,7 @@ pub mod tests {
     use crate::{
         errors::*,
         tee::{
-            claims::{BUILT_IN_CLAIM_COMMON_QUOTE, BUILT_IN_CLAIM_COMMON_QUOTE_TYPE},
+            claims::{BUILT_IN_CLAIM_COMMON_EVIDENCE, BUILT_IN_CLAIM_COMMON_TEE_TYPE},
             GenericAttester, GenericEvidence, GenericVerifier, TeeType,
         },
     };
@@ -46,8 +46,8 @@ pub mod tests {
         let claims = evidence.get_claims()?;
         println!("generated claims:\n{:?}", claims);
 
-        assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_QUOTE));
-        assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_QUOTE_TYPE));
+        assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_EVIDENCE));
+        assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_TEE_TYPE));
         assert!(claims.contains_key(BUILT_IN_CLAIM_SGX_MR_ENCLAVE));
         assert!(claims.contains_key(BUILT_IN_CLAIM_SGX_MR_SIGNER));
 
