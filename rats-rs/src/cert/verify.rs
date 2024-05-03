@@ -10,7 +10,8 @@ use crate::tee::{claims::Claims, AutoVerifier, GenericEvidence, GenericVerifier}
 
 use bstr::ByteSlice;
 use const_oid::ObjectIdentifier;
-use log::{debug, error, warn};
+use itertools::Itertools;
+use log::{debug, error, log_enabled, warn, Level::Debug};
 use pkcs8::der::referenced::OwnedToRef;
 use pkcs8::der::{Decode, DecodePem, Encode};
 use pkcs8::spki::AlgorithmIdentifierOwned;
@@ -57,6 +58,24 @@ impl CertVerifier {
     }
 
     fn check_claims(&self, claims: &Claims) -> Result<VerifyPolicyOutput> {
+        if log_enabled!(Debug) {
+            let iter =
+                claims
+                    .iter()
+                    .map(|(name, value)| match std::str::from_utf8(value.as_ref()) {
+                        Ok(s) if !s.contains('\0') => {
+                            format!("\t{}:\t{} (b\"{}\")", name, hex::encode(value), s)
+                        }
+                        _ => format!("\t{}:\t{}", name, hex::encode(value)),
+                    });
+            let mergered: String = Itertools::intersperse(iter, "\n".into()).collect();
+            debug!(
+                "There are {} claims parsed from the cert:\n{}",
+                claims.len(),
+                mergered
+            );
+        }
+
         match &self.policy {
             VerifiyPolicy::Contains(expected_claims) => {
                 let passed =  expected_claims
