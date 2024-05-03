@@ -3,7 +3,10 @@ use std::fmt::Display;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(C)]
 pub enum ErrorKind {
+    Unknown,
+
     UnsupportedTeeType,
 
     UnrecognizedEvidenceType,
@@ -63,8 +66,6 @@ pub enum ErrorKind {
     SpdmBrokenSession,
 
     SpdmlibError,
-
-    Unknown,
 }
 
 #[derive(Debug, PartialEq)]
@@ -126,6 +127,11 @@ impl Error {
     /// `Unknown`.
     pub fn get_kind(&self) -> ErrorKind {
         self.kind
+    }
+
+    /// Get a const ref msg of this Error. If msg is not set, None is returned.
+    pub fn get_msg_ref(&self) -> &Option<String> {
+        &self.msg
     }
 }
 

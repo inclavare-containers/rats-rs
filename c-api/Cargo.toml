@@ -1,0 +1,22 @@
+[package]
+name = "c-api"
+description = "C API exported by rats-rs"
+authors = ["Kun Lai <me@imlk.top>"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rats-rs = {path = "../rats-rs", features = ["is-sync"]}
+zeroize = {workspace = true}
+ctor = "0.2.8"
+env_logger = {workspace = true}
+log = {workspace = true}
+
+[build-dependencies]
+cbindgen = "0.24.0"
+
+[lib]
+name = "rats_rs"
+crate-type = ["cdylib", "staticlib"]
+

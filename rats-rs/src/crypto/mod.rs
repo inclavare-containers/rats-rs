@@ -6,6 +6,7 @@ use sha2::Digest as _;
 use zeroize::Zeroizing;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
+#[repr(C)]
 pub enum HashAlgo {
     Sha256,
     Sha384,
@@ -13,6 +14,7 @@ pub enum HashAlgo {
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
+#[repr(C)]
 pub enum AsymmetricAlgo {
     Rsa2048,
     Rsa3072,

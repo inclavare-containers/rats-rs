@@ -12,19 +12,21 @@ use bstr::ByteSlice;
 use const_oid::ObjectIdentifier;
 use log::{debug, error, warn};
 use pkcs8::der::referenced::OwnedToRef;
-use pkcs8::der::{Decode, Encode};
+use pkcs8::der::{Decode, DecodePem, Encode};
 use pkcs8::spki::AlgorithmIdentifierOwned;
 use signature::Verifier;
 use x509_cert::Certificate;
 
 pub enum VerifiyPolicy {
     Contains(Claims),
+    Custom(Box<dyn Fn(&Claims) -> VerifyPolicyOutput>),
 }
 
 #[derive(PartialEq, Debug)]
+#[repr(C)]
 pub enum VerifyPolicyOutput {
-    Passed,
     Failed,
+    Passed,
 }
 
 #[allow(dead_code)]
@@ -34,16 +36,24 @@ pub struct CertVerifier {
 
 #[allow(dead_code)]
 impl CertVerifier {
-    fn new(policy: VerifiyPolicy) -> Self {
+    pub fn new(policy: VerifiyPolicy) -> Self {
         Self { policy }
     }
 
-    fn verify(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
-        let claims = verify_cert_der(cert)?;
+    pub fn verify_pem(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
+        let claims = verify_cert_pem(cert)?;
+        self.check_claims(&claims)
+    }
 
-        let passed = match &self.policy {
+    pub fn verify_der(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
+        let claims = verify_cert_der(cert)?;
+        self.check_claims(&claims)
+    }
+
+    fn check_claims(&self, claims: &Claims) -> Result<VerifyPolicyOutput> {
+        match &self.policy {
             VerifiyPolicy::Contains(expected_claims) => {
-                expected_claims
+                let passed =  expected_claims
                     .iter()
                     .all(|(name, expected_value)| match claims.get(name) {
                         Some(value) => {
@@ -57,14 +67,14 @@ impl CertVerifier {
                             error!("Claim missing detected, with claim name: {name}");
                             false
                         },
-                    })
+                    });
+                if passed {
+                    Ok(VerifyPolicyOutput::Passed)
+                } else {
+                    Ok(VerifyPolicyOutput::Failed)
+                }
             }
-        };
-
-        if passed {
-            Ok(VerifyPolicyOutput::Passed)
-        } else {
-            Ok(VerifyPolicyOutput::Failed)
+            VerifiyPolicy::Custom(func) => Ok(func(claims)),
         }
     }
 }
@@ -73,7 +83,17 @@ pub(crate) fn verify_cert_der(cert: &[u8]) -> Result<Claims> {
     let cert = Certificate::from_der(cert)
         .kind(ErrorKind::ParseCertError)
         .context("failed to parse certificate from der")?;
+    verify_cert(&cert)
+}
 
+pub(crate) fn verify_cert_pem(cert: &[u8]) -> Result<Claims> {
+    let cert = Certificate::from_pem(cert)
+        .kind(ErrorKind::ParseCertError)
+        .context("failed to parse certificate from pem")?;
+    verify_cert(&cert)
+}
+
+pub(crate) fn verify_cert(cert: &Certificate) -> Result<Claims> {
     /* check self-signed cert */
     verify_cert_signature(&cert, &cert).kind(ErrorKind::CertVerifySignatureFailed)?;
 
@@ -282,21 +302,21 @@ pub mod tests {
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Contains(claims.clone())).verify(&cert)?,
+            CertVerifier::new(VerifiyPolicy::Contains(claims.clone())).verify_der(&cert)?,
             VerifyPolicyOutput::Passed
         );
 
         let mut claims_mismatch = claims.clone();
         claims_mismatch.insert("key1".into(), "test-mismatch-value".into());
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Contains(claims_mismatch)).verify(&cert)?,
+            CertVerifier::new(VerifiyPolicy::Contains(claims_mismatch)).verify_der(&cert)?,
             VerifyPolicyOutput::Failed
         );
 
         let mut claims_missing = claims.clone();
         claims_missing.insert("key3".into(), "test-missing-value".into());
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Contains(claims_missing)).verify(&cert)?,
+            CertVerifier::new(VerifiyPolicy::Contains(claims_missing)).verify_der(&cert)?,
             VerifyPolicyOutput::Failed
         );
 
@@ -324,7 +344,7 @@ pub mod tests {
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Contains(claims.clone())).verify(&cert)?,
+            CertVerifier::new(VerifiyPolicy::Contains(claims.clone())).verify_der(&cert)?,
             VerifyPolicyOutput::Failed
         );
 

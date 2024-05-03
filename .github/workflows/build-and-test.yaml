@@ -25,9 +25,21 @@ jobs:
         env:
           HOME: /root
 
-      - name: Compile ${{ github.repository }}
+      - name: Compile rats-rs (rust lib)
         run:
-          cargo build && cargo build --bin spdm
+          cargo build --package rats-rs
+        env:
+          HOME: /root
+
+      - name: Compile rats-rs (C API)
+        run:
+          cmake -Hc-api -Bbuild && make -Cbuild all && make -Cbuild install
+        env:
+          HOME: /root
+
+      - name: Compile rats-rs (example/spdm)
+        run:
+          cargo build --bin spdm
         env:
           HOME: /root
 

@@ -32,7 +32,7 @@ spin = {workspace = true}
 thiserror = "1.0.56"
 tokio = {version = "1.36.0", features = ["full"], optional = true}
 x509-cert = {version = "0.2.5", features = ["builder"], optional = true}
-zeroize = "1.7.0"
+zeroize = {workspace = true}
 bstr = "1.9.1"
 itertools = "0.12.1"
 indexmap = {version = "2.2.6", features = ["std", "serde"]}
