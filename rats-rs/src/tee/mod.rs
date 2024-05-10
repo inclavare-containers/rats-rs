@@ -1,5 +1,8 @@
 use std::any::Any;
 
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
+
 use crate::errors::*;
 use self::claims::Claims;
 
@@ -9,6 +12,9 @@ pub mod sgx_dcap;
 
 #[cfg(any(feature = "attester-tdx", feature = "verifier-tdx"))]
 pub mod tdx;
+
+#[cfg(any(feature = "coco"))]
+pub mod coco;
 
 /// Trait representing generic evidence.
 pub trait GenericEvidence: Any {
@@ -37,7 +43,7 @@ pub trait GenericAttester {
 pub trait GenericVerifier {
     type Evidence: GenericEvidence;
 
-    /// Verifiy the provided evidence against the given report data.
+    /// Verifiy the provided evidence with the Trust Anchor and checking the report data matches the one in the evidence.
     fn verify_evidence(
         &self,
         evidence: &Self::Evidence,
@@ -45,8 +51,18 @@ pub trait GenericVerifier {
     ) -> Result<()>;
 }
 
+pub trait GenericConverter {
+    type InEvidence: GenericEvidence;
+    type OutEvidence: GenericEvidence;
+
+    fn convert(
+        &self,
+        in_evidence:&Self::InEvidence
+    ) -> Result<Self::OutEvidence>;
+}
+
 /// Enum representing different types of TEEs.
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq, EnumIter, Clone, Copy)]
 pub enum TeeType {
     SgxDcap,
     Tdx,
@@ -64,6 +80,25 @@ impl TeeType {
             return Some(Self::Tdx);
         }
         return None;
+    }
+
+    pub fn id_str(&self) -> &'static str{
+        match self {
+            TeeType::SgxDcap => "sgx-dcap",
+            TeeType::Tdx => "tdx",
+        }
+    }
+    
+    pub fn from_id_str(id_str: &str) -> Result<Self>{
+        for tee_type in TeeType::iter(){
+            if tee_type.id_str().eq(id_str) {
+                return Ok(tee_type)
+            }
+        }
+        return Err(Error::kind_with_msg(
+            ErrorKind::UnsupportedTeeType,
+            format!("Unknown tee type id_str `{id_str}`"),
+        ));
     }
 }
 

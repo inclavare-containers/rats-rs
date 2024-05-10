@@ -35,6 +35,16 @@ pub enum ErrorKind {
 
     TdxVerifierReportDataMismatch,
 
+    CocoConnectTtrpcFailed,
+
+    CocoRequestAAFailed,
+
+    CocoRequestASFailed,
+
+    CocoVerifyTokenFailed,
+
+    CocoParseTokenFailed,
+
     InvalidParameter,
 
     UnsupportedHashAlgo,
