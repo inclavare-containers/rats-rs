@@ -26,7 +26,7 @@ impl GenericVerifier for TdxVerifier {
     type Evidence = TdxEvidence;
 
     fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()> {
-        /* Verify quote with intel sgx trsut chain */
+        /* Verify quote with intel sgx trust chain */
         ecdsa_quote_verification(evidence.as_quote_data())
             .context("Evidence's identity verification error.")?;
 
