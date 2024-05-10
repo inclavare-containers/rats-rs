@@ -18,7 +18,7 @@ use crate::cert::create::CertBuilder;
 use crate::crypto::AsymmetricAlgo;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
-use crate::tee::AutoAttester;
+use crate::tee::auto::AutoAttester;
 use crate::transport::GenericSecureTransPort;
 use crate::transport::GenericSecureTransPortRead;
 use crate::transport::GenericSecureTransPortWrite;

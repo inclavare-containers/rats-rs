@@ -6,7 +6,7 @@ use rats_rs::errors::*;
 use rats_rs::tee::claims::Claims;
 use rats_rs::tee::sgx_dcap::attester::SgxDcapAttester;
 use rats_rs::tee::tdx::attester::TdxAttester;
-use rats_rs::{cert::create::CertBuilder, tee::AutoAttester};
+use rats_rs::{cert::create::CertBuilder, tee::auto::AutoAttester};
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::ffi::{c_char, c_void};

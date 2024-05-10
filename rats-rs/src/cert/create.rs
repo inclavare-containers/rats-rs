@@ -140,7 +140,7 @@ pub mod tests {
     use crate::{
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
         errors::*,
-        tee::{claims::Claims, AutoAttester, TeeType},
+        tee::{auto::AutoAttester, claims::Claims, TeeType},
     };
 
     #[allow(unused_imports)]

@@ -30,7 +30,7 @@ extern crate alloc;
 use crate::cert::create::CertBuilder;
 use crate::crypto::{AsymmetricAlgo, HashAlgo};
 use crate::errors::*;
-use crate::tee::AutoAttester;
+use crate::tee::auto::AutoAttester;
 use crate::transport::spdm::io::FramedStream;
 use crate::transport::spdm::transport::SimpleTransportEncap;
 use crate::transport::GenericSecureTransPort;
@@ -316,7 +316,7 @@ pub mod tests {
     use crate::{
         cert::create::CertBuilder,
         crypto::{AsymmetricAlgo, HashAlgo},
-        tee::{AutoAttester, TeeType},
+        tee::TeeType,
         transport::{
             spdm::secret::{
                 asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},

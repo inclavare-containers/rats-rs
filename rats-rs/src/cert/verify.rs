@@ -6,7 +6,8 @@ use super::CLAIM_NAME_PUBLIC_KEY_HASH;
 use crate::crypto::DefaultCrypto;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
-use crate::tee::{claims::Claims, AutoVerifier, GenericEvidence, GenericVerifier};
+use crate::tee::auto::{AutoEvidence, AutoVerifier};
+use crate::tee::{claims::Claims, GenericEvidence, GenericVerifier};
 
 use bstr::ByteSlice;
 use const_oid::ObjectIdentifier;
@@ -138,7 +139,7 @@ pub(crate) fn verify_cert(cert: &Certificate) -> Result<Claims> {
 
     let (tag, raw_evidence, claims_buffer) = parse_evidence_buffer_with_tag(evidence_buffer)?;
 
-    let evidence = crate::tee::AutoEvidence::create_evidence_from_dice(tag, &raw_evidence)?;
+    let evidence = AutoEvidence::create_evidence_from_dice(tag, &raw_evidence)?;
     let tee_type = evidence.get_tee_type();
     debug!("TEE type of this cert is {:?}", tee_type);
     let verifier = AutoVerifier::new();
@@ -268,11 +269,12 @@ pub mod tests {
 
     use crate::{
         cert::create::CertBuilder,
-        crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
+        crypto::{AsymmetricAlgo, HashAlgo},
         errors::*,
         tee::{
+            auto::AutoAttester,
             claims::{Claims, BUILT_IN_CLAIM_COMMON_TEE_TYPE},
-            AutoAttester, TeeType,
+            TeeType,
         },
     };
 
