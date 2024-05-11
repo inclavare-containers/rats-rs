@@ -118,7 +118,7 @@ impl<A: GenericAttester> CertBuilder<A> {
         let evidence = self.attester.get_evidence(&claims_buffer_hash)?;
         let evidence_buffer = generate_evidence_buffer_with_tag(
             evidence.get_dice_cbor_tag(),
-            evidence.get_dice_raw_evidence(),
+            &evidence.get_dice_raw_evidence()?,
             &claims_buffer,
         )?;
 

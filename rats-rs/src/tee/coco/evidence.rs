@@ -62,9 +62,10 @@ impl GenericEvidence for CocoEvidence {
         return OCBR_TAG_EVIDENCE_COCO_EVIDENCE;
     }
 
-    fn get_dice_raw_evidence(&self) -> &[u8] {
-        todo!()
-        // &self.data
+    fn get_dice_raw_evidence(&self) -> Result<Vec<u8>> {
+        let mut res = vec![];
+        ciborium::into_writer(&self, &mut res)?;
+        Ok(res)
     }
 
     fn get_tee_type(&self) -> crate::tee::TeeType {
@@ -110,8 +111,8 @@ impl GenericEvidence for CocoAsToken {
         return OCBR_TAG_EVIDENCE_COCO_TOKEN;
     }
 
-    fn get_dice_raw_evidence(&self) -> &[u8] {
-        &self.data.as_bytes()
+    fn get_dice_raw_evidence(&self) -> Result<Vec<u8>> {
+        Ok(self.data.as_bytes().to_owned())
     }
 
     fn get_tee_type(&self) -> crate::tee::TeeType {

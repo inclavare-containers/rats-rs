@@ -91,8 +91,8 @@ impl SgxDcapEvidence {
 }
 
 impl GenericEvidence for SgxDcapEvidence {
-    fn get_dice_raw_evidence(&self) -> &[u8] {
-        self.data.as_slice()
+    fn get_dice_raw_evidence(&self) -> Result<Vec<u8>> {
+        Ok(self.data.clone())
     }
 
     fn get_dice_cbor_tag(&self) -> u64 {

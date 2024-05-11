@@ -12,7 +12,7 @@ impl GenericEvidence for AutoEvidence {
         self.0.get_dice_cbor_tag()
     }
 
-    fn get_dice_raw_evidence(&self) -> &[u8] {
+    fn get_dice_raw_evidence(&self) -> Result<Vec<u8>> {
         self.0.get_dice_raw_evidence()
     }
 

@@ -29,7 +29,7 @@ pub trait GenericEvidence: Any {
     fn get_dice_cbor_tag(&self) -> u64;
 
     /// Return the raw evidence data used for generating DICE cert.
-    fn get_dice_raw_evidence(&self) -> &[u8];
+    fn get_dice_raw_evidence(&self) -> Result<Vec<u8>>;
 
     /// Create evidence from cbor tag and raw evidence of a DICE cert.
     fn create_evidence_from_dice(
