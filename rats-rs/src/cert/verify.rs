@@ -139,7 +139,20 @@ pub(crate) fn verify_cert(cert: &Certificate) -> Result<Claims> {
 
     let (tag, raw_evidence, claims_buffer) = parse_evidence_buffer_with_tag(evidence_buffer)?;
 
-    let evidence = AutoEvidence::create_evidence_from_dice(tag, &raw_evidence)?;
+    let evidence = match AutoEvidence::create_evidence_from_dice(tag, &raw_evidence) {
+        crate::tee::DiceParseEvidenceOutput::NotMatch => {
+            return Err(Error::kind_with_msg(
+                ErrorKind::UnrecognizedEvidenceType,
+                format!(
+                    "Unrecognized evidence type, cbor_tag: {:#x?}, raw_evidence: {:02x?}",
+                    tag, raw_evidence
+                ),
+            ))
+        }
+        crate::tee::DiceParseEvidenceOutput::MatchButInvalid(e) => return Err(e),
+        crate::tee::DiceParseEvidenceOutput::Ok(v) => v,
+    };
+
     let tee_type = evidence.get_tee_type();
     debug!("TEE type of this cert is {:?}", tee_type);
     let verifier = AutoVerifier::new();

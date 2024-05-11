@@ -10,7 +10,7 @@ use crate::cert::dice::cbor::{
 use crate::crypto::HashAlgo;
 use crate::errors::*;
 use crate::tee::claims::Claims;
-use crate::tee::{GenericEvidence, TeeType};
+use crate::tee::{DiceParseEvidenceOutput, GenericEvidence, TeeType};
 
 pub struct CocoEvidence {
     pub(self) tee_type: TeeType,
@@ -73,6 +73,21 @@ impl GenericEvidence for CocoEvidence {
 
     fn get_claims(&self) -> Result<crate::tee::claims::Claims> {
         todo!()
+    }
+
+    fn create_evidence_from_dice(
+        cbor_tag: u64,
+        raw_evidence: &[u8],
+    ) -> DiceParseEvidenceOutput<Self> {
+        if cbor_tag == OCBR_TAG_EVIDENCE_COCO_EVIDENCE {
+            return match ciborium::from_reader(raw_evidence)
+                .context("Failed to deserialize coco evidence")
+            {
+                Ok(v) => DiceParseEvidenceOutput::Ok(v),
+                Err(e) => DiceParseEvidenceOutput::MatchButInvalid(e.into()),
+            };
+        }
+        return DiceParseEvidenceOutput::NotMatch;
     }
 }
 
@@ -158,6 +173,23 @@ impl GenericEvidence for CocoAsToken {
             }
         })
     }
+
+    fn create_evidence_from_dice(
+        cbor_tag: u64,
+        raw_evidence: &[u8],
+    ) -> DiceParseEvidenceOutput<Self> {
+        if cbor_tag == OCBR_TAG_EVIDENCE_COCO_TOKEN {
+            return match std::str::from_utf8(raw_evidence)
+                .context("Failed to parse evidence as utf-8 string")
+                .map(|token| Self::new(token.to_owned()))
+            {
+                Ok(Ok(v)) => DiceParseEvidenceOutput::Ok(v),
+                Ok(Err(e)) => DiceParseEvidenceOutput::MatchButInvalid(e),
+                Err(e) => DiceParseEvidenceOutput::MatchButInvalid(e.into()),
+            };
+        }
+        return DiceParseEvidenceOutput::NotMatch;
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -202,31 +234,4 @@ impl<'de> Deserialize<'de> for CocoEvidence {
                 .map_err(|e| serde::de::Error::custom(format!("{e:?}")))?,
         })
     }
-}
-
-pub(crate) fn create_coco_evidence_from_dice(
-    cbor_tag: u64,
-    raw_evidence: &[u8],
-) -> Option<Result<CocoEvidence>> {
-    if cbor_tag == OCBR_TAG_EVIDENCE_COCO_EVIDENCE {
-        let coco_evidence =
-            ciborium::from_reader(raw_evidence).context("Failed to deserialize coco evidence");
-        return Some(coco_evidence);
-    }
-    return None;
-}
-
-pub(crate) fn create_coco_as_token_from_dice(
-    cbor_tag: u64,
-    raw_evidence: &[u8],
-) -> Option<Result<CocoAsToken>> {
-    if cbor_tag == OCBR_TAG_EVIDENCE_COCO_TOKEN {
-        match String::from_utf8(raw_evidence.to_owned())
-            .context("Failed to parse evidence as utf-8 string")
-        {
-            Ok(token) => return Some(CocoAsToken::new(token)),
-            Err(e) => return Some(Err(e)),
-        }
-    }
-    return None;
 }

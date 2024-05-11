@@ -8,6 +8,7 @@ use crate::errors::*;
 
 pub mod auto;
 pub mod claims;
+
 #[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap"))]
 pub mod sgx_dcap;
 
@@ -17,6 +18,11 @@ pub mod tdx;
 #[cfg(any(feature = "coco"))]
 pub mod coco;
 
+pub enum DiceParseEvidenceOutput<T> {
+    NotMatch,
+    MatchButInvalid(Error),
+    Ok(T),
+}
 /// Trait representing generic evidence.
 pub trait GenericEvidence: Any {
     /// Return the CBOR tag used for generating DICE cert.
@@ -24,6 +30,14 @@ pub trait GenericEvidence: Any {
 
     /// Return the raw evidence data used for generating DICE cert.
     fn get_dice_raw_evidence(&self) -> &[u8];
+
+    /// Create evidence from cbor tag and raw evidence of a DICE cert.
+    fn create_evidence_from_dice(
+        cbor_tag: u64,
+        raw_evidence: &[u8],
+    ) -> DiceParseEvidenceOutput<Self>
+    where
+        Self: Sized;
 
     /// Return the type of Trusted Execution Environment (TEE) associated with the evidence.
     fn get_tee_type(&self) -> TeeType;

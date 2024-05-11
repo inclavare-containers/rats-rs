@@ -1,6 +1,7 @@
 use crate::cert::dice::cbor::OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT;
 use crate::errors::*;
 use crate::tee::claims::Claims;
+use crate::tee::DiceParseEvidenceOutput;
 use crate::{
     cert::dice::cbor::OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE,
     tee::{GenericEvidence, TeeType},
@@ -98,6 +99,37 @@ impl GenericEvidence for SgxDcapEvidence {
         OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE
     }
 
+    /// Creates SgxDcapEvidence from DICE cert data.
+    ///
+    /// # Arguments
+    ///
+    /// * `cbor_tag` - The CBOR tag associated with the evidence, which is recorded in the cert.
+    /// * `raw_evidence` - The raw evidence data. It may be maliciously constructed and should be carefully validated.
+    ///
+    /// # Returns
+    ///
+    /// - `None` if the provided raw evidence is not supported by this TEE type.
+    /// - `Some(Result<SgxDcapEvidence>)`:
+    ///   - `Ok(SgxDcapEvidence)` if the evidence is supported and passes integrity checks.
+    ///   - `Err(Error)` if the evidence is supported but fails integrity checks or is an unsupported version.
+    fn create_evidence_from_dice(
+        cbor_tag: u64,
+        raw_evidence: &[u8],
+    ) -> DiceParseEvidenceOutput<Self> {
+        if cbor_tag == OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE {
+            return match SgxDcapEvidence::new_from_untrusted(raw_evidence) {
+                Ok(v) => DiceParseEvidenceOutput::Ok(v),
+                Err(e) => DiceParseEvidenceOutput::MatchButInvalid(e),
+            };
+        } else if cbor_tag == OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT {
+            return DiceParseEvidenceOutput::MatchButInvalid(Error::kind_with_msg(
+                ErrorKind::SgxDcapUnsupportedEvidenceType,
+                "Unsupported evidence type: Intel TEE report (TDX report or SGX report type 2)",
+            ));
+        }
+        return DiceParseEvidenceOutput::NotMatch;
+    }
+
     fn get_tee_type(&self) -> TeeType {
         TeeType::SgxDcap
     }
@@ -105,33 +137,4 @@ impl GenericEvidence for SgxDcapEvidence {
     fn get_claims(&self) -> Result<Claims> {
         super::claims::gen_claims_from_quote(self.as_quote())
     }
-}
-
-/// Creates SgxDcapEvidence from DICE cert data.
-///
-/// # Arguments
-///
-/// * `cbor_tag` - The CBOR tag associated with the evidence, which is recorded in the cert.
-/// * `raw_evidence` - The raw evidence data. It may be maliciously constructed and should be carefully validated.
-///
-/// # Returns
-///
-/// - `None` if the provided raw evidence is not supported by this TEE type.
-/// - `Some(Result<SgxDcapEvidence>)`:
-///   - `Ok(SgxDcapEvidence)` if the evidence is supported and passes integrity checks.
-///   - `Err(Error)` if the evidence is supported but fails integrity checks or is an unsupported version.
-
-pub(crate) fn create_evidence_from_dice(
-    cbor_tag: u64,
-    raw_evidence: &[u8],
-) -> Option<Result<SgxDcapEvidence>> {
-    if cbor_tag == OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE {
-        return Some(SgxDcapEvidence::new_from_untrusted(raw_evidence));
-    } else if cbor_tag == OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT {
-        return Some(Err(Error::kind_with_msg(
-            ErrorKind::SgxDcapUnsupportedEvidenceType,
-            "Unsupported evidence type: Intel TEE report (TDX report or SGX report type 2)",
-        )));
-    }
-    return None;
 }
