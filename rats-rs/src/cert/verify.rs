@@ -6,7 +6,11 @@ use super::CLAIM_NAME_PUBLIC_KEY_HASH;
 use crate::crypto::DefaultCrypto;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
-use crate::tee::auto::{AutoEvidence, AutoVerifier};
+use crate::tee::auto::{AutoEvidence, AutoVerifier, LocalEvidence};
+use crate::tee::coco::converter::CocoConverter;
+use crate::tee::coco::evidence::CocoEvidence;
+use crate::tee::coco::verifier::CocoVerifier;
+use crate::tee::GenericConverter;
 use crate::tee::{claims::Claims, GenericEvidence, GenericVerifier};
 
 use bstr::ByteSlice;
@@ -21,6 +25,22 @@ use x509_cert::Certificate;
 
 /// Represents the different verification policies that can be applied to certificates.
 pub enum VerifiyPolicy {
+    /// Verify with Local Attester
+    Local(ClaimsCheck),
+    /// Verify with CoCo policies. Should be used only when peer is using CoCo Attester
+    Coco {
+        /// The Grpc address of CoCo Attestation Service
+        as_addr: String,
+        /// The policy ids needed to check
+        policy_ids: Vec<String>,
+        /// The path of all trusted certs to be used for checking CoCo AS token 
+        trusted_certs_paths: Option<Vec<String>>,
+        /// Additional strategy for checking cliams (both builtin claims and custom claims) 
+        claims_check: ClaimsCheck,
+    },
+}
+
+pub enum ClaimsCheck {
     /// Verifies if the certificate contains a specific set of claims.
     Contains(Claims),
     /// Enables the use of a custom verification function, providing flexibility for specialized validation logic.
@@ -49,13 +69,129 @@ impl CertVerifier {
     }
 
     pub fn verify_pem(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
-        let claims = verify_cert_pem(cert)?;
+        let cert = Certificate::from_pem(cert)
+            .kind(ErrorKind::ParseCertError)
+            .context("failed to parse certificate from pem")?;
+        let claims = self.verify_cert(&cert)?;
         self.check_claims(&claims)
     }
 
     pub fn verify_der(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
-        let claims = verify_cert_der(cert)?;
+        let cert = Certificate::from_der(cert)
+            .kind(ErrorKind::ParseCertError)
+            .context("failed to parse certificate from der")?;
+        let claims = self.verify_cert(&cert)?;
         self.check_claims(&claims)
+    }
+
+    fn verify_cert(&self, cert: &Certificate) -> Result<Claims> {
+        /* check self-signed cert */
+        verify_cert_signature(&cert, &cert).kind(ErrorKind::CertVerifySignatureFailed)?;
+
+        /* Extract the evidence_buffer and endorsements_buffer(optional) from the X.509 certificate extension. */
+        let evidence_buffer = extract_ext_with_oid(&cert, &OID_TCG_DICE_TAGGED_EVIDENCE);
+        let _endorsements_buffer = extract_ext_with_oid(&cert, &OID_TCG_DICE_ENDORSEMENT_MANIFEST);
+
+        /* evidence extension is not optional */
+        let evidence_buffer = match evidence_buffer {
+            Some(v) => v,
+            None => Err(Error::kind_with_msg(
+                ErrorKind::CertExtractExtensionFailed,
+                "failed to extract the evidence extensions from the certificate",
+            ))?,
+        };
+        /* endorsements extension is optional */
+        // TODO: endorsements extension
+
+        let (cbor_tag, raw_evidence, claims_buffer) =
+            parse_evidence_buffer_with_tag(evidence_buffer)?;
+        /* Note: the hash algo is hardcoded to sha256, as defined in the Interoperable RA-TLS */
+        let claims_buffer_hash = DefaultCrypto::hash(HashAlgo::Sha256, &claims_buffer);
+
+        /* Parse evidence, verify evidence and get builtin claims */
+        let builtin_claims =
+            match &self.policy {
+                VerifiyPolicy::Local(_) => {
+                    let evidence = Into::<Result<_>>::into(
+                        AutoEvidence::create_evidence_from_dice(cbor_tag, &raw_evidence),
+                    )
+                    .with_context(|| {
+                        format!(
+                            "Failed to parse evidence: cbor_tag: {:#x?}, raw_evidence: {:02x?}",
+                            cbor_tag, raw_evidence
+                        )
+                    })?;
+                    let tee_type = evidence.get_tee_type();
+                    debug!("TEE type of this cert is {:?}", tee_type);
+                    let verifier = AutoVerifier::new();
+                    verifier.verify_evidence(&evidence, &claims_buffer_hash)?;
+                    evidence.get_claims()?
+                }
+                VerifiyPolicy::Coco {
+                    as_addr,
+                    policy_ids,
+                    trusted_certs_paths,
+                    ..
+                } => {
+                    let evidence = Into::<Result<_>>::into(
+                        CocoEvidence::create_evidence_from_dice(cbor_tag, &raw_evidence),
+                    )
+                    .with_context(|| {
+                        format!(
+                            "Failed to parse evidence: cbor_tag: {:#x?}, raw_evidence: {:02x?}",
+                            cbor_tag, raw_evidence
+                        )
+                    })?;
+                    let converter = CocoConverter::new(&as_addr, &policy_ids)?;
+                    let token = converter.convert(&evidence)?;
+                    let verifier = CocoVerifier::new(&trusted_certs_paths, &policy_ids)?;
+                    verifier.verify_evidence(&token, &claims_buffer_hash)?;
+                    token.get_claims()?
+                }
+            };
+
+        /* Parse custom claims from the claims_buffer as addition to the built-in claims. */
+        let custom_claims = parse_claims_buffer(&claims_buffer)?;
+
+        let pubkey_hash_value_buffer =
+            custom_claims
+                .get(CLAIM_NAME_PUBLIC_KEY_HASH)
+                .ok_or_else(|| {
+                    Error::kind_with_msg(
+                        ErrorKind::CertVerifyPublicKeyHashFailed,
+                        format!(
+                            "failed to find claim with name '{}' from claims list with length {}",
+                            CLAIM_NAME_PUBLIC_KEY_HASH,
+                            custom_claims.len()
+                        ),
+                    )
+                })?;
+
+        /* Verify pubkey_hash */
+        let (pubkey_hash_algo, pubkey_hash) =
+            parse_pubkey_hash_value_buffer(&pubkey_hash_value_buffer)?;
+        let spki_bytes = cert.tbs_certificate.subject_public_key_info.to_der()?;
+        let calculated_pubkey_hash = DefaultCrypto::hash(pubkey_hash_algo, &spki_bytes);
+
+        if pubkey_hash != calculated_pubkey_hash {
+            Err(Error::kind_with_msg(
+                ErrorKind::CertVerifyPublicKeyHashFailed,
+                "hash of public key mismatch",
+            ))?
+        }
+
+        /* Merge builtin claims and custom claims */
+        let mut claims = builtin_claims;
+        custom_claims.into_iter().for_each(|(k, v)| {
+        if claims.contains_key(&k) {
+            /* Note that custom claims do not have the guarantees that come with hardware, so we need to prevent custom claims from overriding built-in claims (guaranteed by TEE hardware). */
+            warn!("Claims overriding is detected and is prevented: a custom claim with key '{k}' duplicates existing built-in claims");
+            return;
+        }
+        claims.insert(k, v);
+    });
+
+        Ok(claims)
     }
 
     fn check_claims(&self, claims: &Claims) -> Result<VerifyPolicyOutput> {
@@ -78,8 +214,11 @@ impl CertVerifier {
         }
 
         match &self.policy {
-            VerifiyPolicy::Contains(expected_claims) => {
-                let passed =  expected_claims
+            VerifiyPolicy::Local(claims_check) | VerifiyPolicy::Coco { claims_check, .. } => {
+                /* For CoCo, the checking of policy_ids have done in the CocoVerifier, so there is no need to check here. */
+                match claims_check {
+                    ClaimsCheck::Contains(expected_claims) => {
+                        let passed =  expected_claims
                     .iter()
                     .all(|(name, expected_value)| match claims.get(name) {
                         Some(value) => {
@@ -94,114 +233,17 @@ impl CertVerifier {
                             false
                         },
                     });
-                if passed {
-                    Ok(VerifyPolicyOutput::Passed)
-                } else {
-                    Ok(VerifyPolicyOutput::Failed)
+                        if passed {
+                            Ok(VerifyPolicyOutput::Passed)
+                        } else {
+                            Ok(VerifyPolicyOutput::Failed)
+                        }
+                    }
+                    ClaimsCheck::Custom(func) => Ok(func(claims)),
                 }
             }
-            VerifiyPolicy::Custom(func) => Ok(func(claims)),
         }
     }
-}
-
-pub(crate) fn verify_cert_der(cert: &[u8]) -> Result<Claims> {
-    let cert = Certificate::from_der(cert)
-        .kind(ErrorKind::ParseCertError)
-        .context("failed to parse certificate from der")?;
-    verify_cert(&cert)
-}
-
-pub(crate) fn verify_cert_pem(cert: &[u8]) -> Result<Claims> {
-    let cert = Certificate::from_pem(cert)
-        .kind(ErrorKind::ParseCertError)
-        .context("failed to parse certificate from pem")?;
-    verify_cert(&cert)
-}
-
-pub(crate) fn verify_cert(cert: &Certificate) -> Result<Claims> {
-    /* check self-signed cert */
-    verify_cert_signature(&cert, &cert).kind(ErrorKind::CertVerifySignatureFailed)?;
-
-    /* Extract the evidence_buffer and endorsements_buffer(optional) from the X.509 certificate extension. */
-    let evidence_buffer = extract_ext_with_oid(&cert, &OID_TCG_DICE_TAGGED_EVIDENCE);
-    let _endorsements_buffer = extract_ext_with_oid(&cert, &OID_TCG_DICE_ENDORSEMENT_MANIFEST);
-
-    /* evidence extension is not optional */
-    let evidence_buffer = match evidence_buffer {
-        Some(v) => v,
-        None => Err(Error::kind_with_msg(
-            ErrorKind::CertExtractExtensionFailed,
-            "failed to extract the evidence extensions from the certificate",
-        ))?,
-    };
-    /* endorsements extension is optional */
-
-    let (tag, raw_evidence, claims_buffer) = parse_evidence_buffer_with_tag(evidence_buffer)?;
-
-    let evidence = match AutoEvidence::create_evidence_from_dice(tag, &raw_evidence) {
-        crate::tee::DiceParseEvidenceOutput::NotMatch => {
-            return Err(Error::kind_with_msg(
-                ErrorKind::UnrecognizedEvidenceType,
-                format!(
-                    "Unrecognized evidence type, cbor_tag: {:#x?}, raw_evidence: {:02x?}",
-                    tag, raw_evidence
-                ),
-            ))
-        }
-        crate::tee::DiceParseEvidenceOutput::MatchButInvalid(e) => return Err(e),
-        crate::tee::DiceParseEvidenceOutput::Ok(v) => v,
-    };
-
-    let tee_type = evidence.get_tee_type();
-    debug!("TEE type of this cert is {:?}", tee_type);
-    let verifier = AutoVerifier::new();
-
-    /* Note: the hash algo is hardcoded to sha256, as defined in the Interoperable RA-TLS */
-    let claims_buffer_hash = DefaultCrypto::hash(HashAlgo::Sha256, &claims_buffer);
-    verifier.verify_evidence(&evidence, &claims_buffer_hash)?;
-    let builtin_claims = evidence.get_claims()?;
-    let custom_claims = parse_claims_buffer(&claims_buffer)?;
-
-    let pubkey_hash_value_buffer =
-        custom_claims
-            .get(CLAIM_NAME_PUBLIC_KEY_HASH)
-            .ok_or_else(|| {
-                Error::kind_with_msg(
-                    ErrorKind::CertVerifyPublicKeyHashFailed,
-                    format!(
-                        "failed to find claim with name '{}' from claims list with length {}",
-                        CLAIM_NAME_PUBLIC_KEY_HASH,
-                        custom_claims.len()
-                    ),
-                )
-            })?;
-
-    /* Verify pubkey_hash */
-    let (pubkey_hash_algo, pubkey_hash) =
-        parse_pubkey_hash_value_buffer(&pubkey_hash_value_buffer)?;
-    let spki_bytes = cert.tbs_certificate.subject_public_key_info.to_der()?;
-    let calculated_pubkey_hash = DefaultCrypto::hash(pubkey_hash_algo, &spki_bytes);
-
-    if pubkey_hash != calculated_pubkey_hash {
-        Err(Error::kind_with_msg(
-            ErrorKind::CertVerifyPublicKeyHashFailed,
-            "hash of public key mismatch",
-        ))?
-    }
-
-    /* Merge builtin claims and custom claims */
-    let mut claims = builtin_claims;
-    custom_claims.into_iter().for_each(|(k, v)| {
-        if claims.contains_key(&k) {
-            /* Note that custom claims do not have the guarantees that come with hardware, so we need to prevent custom claims from overriding built-in claims (guaranteed by TEE hardware). */
-            warn!("Claims overriding is detected and is prevented: a custom claim with key '{k}' duplicates existing built-in claims");
-            return;
-        }
-        claims.insert(k, v);
-    });
-
-    Ok(claims)
 }
 
 fn verify_cert_signature(issuer: &Certificate, signed: &Certificate) -> Result<()> {
@@ -295,35 +337,6 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn test_verify_cert_der() -> Result<()> {
-        if TeeType::detect_env() == None {
-            /* skip */
-            return Ok(());
-        }
-
-        /* Test verifiy normal cert */
-        let mut claims = Claims::new();
-        claims.insert("key1".into(), "value1".into());
-        claims.insert("key2".into(), "value2".into());
-
-        let attester = AutoAttester::new();
-        let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
-            .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
-        let cert = cert_bundle.cert_to_der()?;
-
-        let parsed_claims = verify_cert_der(&cert)?;
-
-        let hex_claims = parsed_claims
-            .into_iter()
-            .map(|(k, v)| (k, hex::encode(v)))
-            .collect::<IndexMap<String, String>>();
-        println!("{hex_claims:?}");
-
-        Ok(())
-    }
-
-    #[test]
     fn test_verify_attestation_certificate() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
@@ -342,21 +355,24 @@ pub mod tests {
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Contains(claims.clone())).verify_der(&cert)?,
+            CertVerifier::new(VerifiyPolicy::Local(ClaimsCheck::Contains(claims.clone())))
+                .verify_der(&cert)?,
             VerifyPolicyOutput::Passed
         );
 
         let mut claims_mismatch = claims.clone();
         claims_mismatch.insert("key1".into(), "test-mismatch-value".into());
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Contains(claims_mismatch)).verify_der(&cert)?,
+            CertVerifier::new(VerifiyPolicy::Local(ClaimsCheck::Contains(claims_mismatch)))
+                .verify_der(&cert)?,
             VerifyPolicyOutput::Failed
         );
 
         let mut claims_missing = claims.clone();
         claims_missing.insert("key3".into(), "test-missing-value".into());
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Contains(claims_missing)).verify_der(&cert)?,
+            CertVerifier::new(VerifiyPolicy::Local(ClaimsCheck::Contains(claims_missing)))
+                .verify_der(&cert)?,
             VerifyPolicyOutput::Failed
         );
 
@@ -384,7 +400,8 @@ pub mod tests {
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Contains(claims.clone())).verify_der(&cert)?,
+            CertVerifier::new(VerifiyPolicy::Local(ClaimsCheck::Contains(claims.clone())))
+                .verify_der(&cert)?,
             VerifyPolicyOutput::Failed
         );
 

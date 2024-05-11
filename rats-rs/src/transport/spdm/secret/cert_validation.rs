@@ -4,6 +4,11 @@ use spdmlib::{
     protocol::SpdmCertChainData,
 };
 
+use crate::{
+    cert::verify::{CertVerifier, ClaimsCheck, VerifiyPolicy, VerifyPolicyOutput},
+    tee::claims::Claims,
+};
+
 pub trait ValidationContext {
     fn get_peer_root_cert(&self) -> Option<SpdmCertChainData>;
 }
@@ -20,20 +25,18 @@ pub struct RatsCertValidationStrategy {}
 
 impl CertValidationStrategy for RatsCertValidationStrategy {
     fn verify_cert_chain(&self, cert_chain: &[u8]) -> spdmlib::error::SpdmResult {
-        // TODO: check evidence type and choose Verifier
-        match crate::cert::verify::verify_cert_der(cert_chain) {
-            Ok(claims) => {
-                // TODO: check BUILT_IN_CLAIM_SGX_MR_ENCLAVE etc.
-                claims.iter().for_each(|(k, v)| {
-                    info!("{}:\t{}", k, hex::encode(&v),);
-                });
-                Ok(())
+        let expected_claims = Claims::default(); // TODO: user provided
+
+        let verifier =
+            CertVerifier::new(VerifiyPolicy::Local(ClaimsCheck::Contains(expected_claims)));
+        match verifier.verify_der(cert_chain) {
+            Ok(VerifyPolicyOutput::Passed) => Ok(()),
+            Ok(VerifyPolicyOutput::Failed) => {
+                error!("CertVerifier verify finished with failed output");
+                Err(SPDM_STATUS_INVALID_CERT)
             }
             Err(e) => {
-                error!(
-                    "RatsCertValidationStrategy::verify_cert_chain() failed: {:?}",
-                    e
-                );
+                error!("CertVerifier failed during verifing DER cert: {:?}", e);
                 Err(SPDM_STATUS_INVALID_CERT)
             }
         }

@@ -37,6 +37,10 @@ impl CocoEvidence {
         })
     }
 
+    pub(crate) fn get_tee_type(&self) -> crate::tee::TeeType {
+        self.tee_type
+    }
+
     pub(crate) fn aa_evidence_ref(&self) -> &[u8] {
         &self.aa_evidence
     }
@@ -68,12 +72,9 @@ impl GenericEvidence for CocoEvidence {
         Ok(res)
     }
 
-    fn get_tee_type(&self) -> crate::tee::TeeType {
-        self.tee_type
-    }
-
-    fn get_claims(&self) -> Result<crate::tee::claims::Claims> {
-        todo!()
+    fn get_claims(&self) -> Result<Claims> {
+        // Return empty claims here since the structure of AA evidence is opaque.
+        Ok(Claims::default())
     }
 
     fn create_evidence_from_dice(
@@ -113,10 +114,6 @@ impl GenericEvidence for CocoAsToken {
 
     fn get_dice_raw_evidence(&self) -> Result<Vec<u8>> {
         Ok(self.data.as_bytes().to_owned())
-    }
-
-    fn get_tee_type(&self) -> crate::tee::TeeType {
-        todo!()
     }
 
     fn get_claims(&self) -> Result<Claims> {

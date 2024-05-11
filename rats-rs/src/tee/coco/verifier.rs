@@ -3,6 +3,7 @@ use crate::{errors::*, tee::GenericVerifier};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use log::debug;
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
@@ -18,12 +19,18 @@ use std::sync::Mutex;
 // TODO: rewrite with RustCrypto and jwt crate
 
 pub struct CocoVerifier {
+    /// The trusted certs list used for validating JWT
     trusted_certs: Option<X509Store>,
+    /// The policy ids need to check
+    policy_ids: Vec<String>,
 }
 
 impl CocoVerifier {
-    pub fn new(trusted_certs_paths: Option<Vec<String>>) -> Result<Self> {
-        let trusted_certs = match &trusted_certs_paths {
+    pub fn new(
+        trusted_certs_paths: &Option<Vec<String>>,
+        policy_ids: &Vec<String>,
+    ) -> Result<Self> {
+        let trusted_certs = match trusted_certs_paths {
             Some(paths) => {
                 let mut store_builder = X509StoreBuilder::new()?;
                 for path in paths {
@@ -40,7 +47,10 @@ impl CocoVerifier {
             None => None,
         };
 
-        Ok(Self { trusted_certs })
+        Ok(Self {
+            trusted_certs,
+            policy_ids: policy_ids.to_owned(),
+        })
     }
 
     fn verify_evidence_internal(&self, evidence: &CocoAsToken, report_data: &[u8]) -> Result<()> {
@@ -57,7 +67,7 @@ impl CocoVerifier {
         let header_value = serde_json::from_slice::<Value>(&header)?;
         let claims_value = serde_json::from_slice::<Value>(&claims)?;
 
-        // Check report_data matchs
+        /* Check report_data matchs */
         let runtime_data_expected = CocoEvidence::wrap_runtime_data_as_structed(report_data)?;
 
         let runtime_data_in_token = serde_json::to_string(
@@ -75,7 +85,7 @@ impl CocoVerifier {
             return Err(Error::msg("runtime_data mismatch"));
         }
 
-        // Check timestamp of JWT
+        /* Check timestamp of JWT */
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         let Some(exp) = claims_value["exp"].as_i64() else {
             return Err(Error::msg("token expiration unset"));
@@ -89,7 +99,7 @@ impl CocoVerifier {
             }
         }
 
-        // Check signature of JWT
+        /* Check signature of JWT */
         let jwk_value = claims_value["jwk"].as_object().ok_or_else(|| Error::msg(
             "CoCo Attestation Token Claims must contain public key (JWK format) to verify signature",
         ))?;
@@ -114,50 +124,105 @@ impl CocoVerifier {
             }
         }
 
-        let Some(trusted_store) = &self.trusted_certs else {
-            log::warn!("No Trusted Certificate in Config, skip verification of JWK cert of Attestation Token");
-            return Ok(());
-        };
-
-        let mut cert_chain: Vec<X509> = vec![];
-
-        // Get certificate chain from 'x5c' or 'x5u' in JWK.
-        if let Some(x5c) = rsa_jwk.x5c {
-            for base64_der_cert in x5c {
-                let der_cert = URL_SAFE_NO_PAD.decode(base64_der_cert)?;
-                let cert = X509::from_der(&der_cert)?;
-                cert_chain.push(cert)
+        /* Check that the key used for signing the JWT is valid */
+        match &self.trusted_certs {
+            None => {
+                log::warn!("No Trusted Certificate in Config, skip verification of JWK cert of Attestation Token");
             }
-        } else if let Some(x5u) = rsa_jwk.x5u {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()?;
-            rt.block_on(download_cert_chain(x5u, &mut cert_chain))?;
-        } else {
-            return Err(Error::msg("Missing certificate in Attestation Token JWK"));
+            Some(trusted_store) => {
+                let mut cert_chain: Vec<X509> = vec![];
+
+                /* Get certificate chain from 'x5c' or 'x5u' in JWK. */
+                if let Some(x5c) = rsa_jwk.x5c {
+                    for base64_der_cert in x5c {
+                        let der_cert = URL_SAFE_NO_PAD.decode(base64_der_cert)?;
+                        let cert = X509::from_der(&der_cert)?;
+                        cert_chain.push(cert)
+                    }
+                } else if let Some(x5u) = rsa_jwk.x5u {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()?;
+                    rt.block_on(download_cert_chain(x5u, &mut cert_chain))?;
+                } else {
+                    return Err(Error::msg("Missing certificate in Attestation Token JWK"));
+                }
+
+                /* Check certificate is valid and trustworthy */
+                let mut untrusted_stack = Stack::<X509>::new()?;
+                for cert in cert_chain.iter().skip(1) {
+                    untrusted_stack.push(cert.clone())?;
+                }
+                let mut context = X509StoreContext::new()?;
+                if !context.init(trusted_store, &cert_chain[0], &untrusted_stack, |ctx| {
+                    ctx.verify_cert()
+                })? {
+                    return Err(Error::msg("Untrusted certificate in Attestation Token JWK"));
+                };
+
+                /* Check the public key in JWK is consistent with the public key in certificate */
+                let n = openssl::bn::BigNum::from_slice(&URL_SAFE_NO_PAD.decode(&rsa_jwk.n)?)?;
+                let e = openssl::bn::BigNum::from_slice(&URL_SAFE_NO_PAD.decode(&rsa_jwk.e)?)?;
+                let rsa_public_key = Rsa::from_public_components(n, e)?;
+                let rsa_pkey = PKey::from_rsa(rsa_public_key)?;
+                let cert_pub_key = cert_chain[0].public_key()?;
+                if !cert_pub_key.public_eq(&rsa_pkey) {
+                    return Err(Error::msg(
+                        "Certificate Public Key Mismatched in Attestation Token",
+                    ));
+                }
+            }
         }
 
-        // Check certificate is valid and trustworthy
-        let mut untrusted_stack = Stack::<X509>::new()?;
-        for cert in cert_chain.iter().skip(1) {
-            untrusted_stack.push(cert.clone())?;
-        }
-        let mut context = X509StoreContext::new()?;
-        if !context.init(trusted_store, &cert_chain[0], &untrusted_stack, |ctx| {
-            ctx.verify_cert()
-        })? {
-            return Err(Error::msg("Untrusted certificate in Attestation Token JWK"));
-        };
+        /* Check the evaluation-reports.
+         * The content format of evaluation-reports is documented here: https://github.com/confidential-containers/trustee/blob/43d56f3a4a92a1cc691f63a8e1311bcc0d2b3fc8/attestation-service/docs/example.token.json#L6
+         */
+        let policy_ids_to_allows = claims_value
+                .get("evaluation-reports")
+                .map(|o| o.as_array())
+                .flatten()
+                .ok_or_else(|| Error::msg("Can not found `evaluation-reports` array in CoCo AS token"))?
+                .iter()
+                .enumerate()
+                .map(|(i, o)| -> Result<_> {
+                    debug!("evaluation-reports[{i}]: {o}");
+                    let policy_id =  o.get("policy-id")
+                        .ok_or_else(|| {
+                            Error::msg(format!(
+                                "Can not found `policy-id` in evaluation-reports[{i}]: {o}"
+                            ))
+                        })?.as_str().ok_or_else(|| {
+                            Error::msg(format!(
+                                "The value of `policy-id` should be a string type in evaluation-reports[{i}]: {o}"
+                            ))
+                        })?;
 
-        // Check the public key in JWK is consistent with the public key in certificate
-        let n = openssl::bn::BigNum::from_slice(&URL_SAFE_NO_PAD.decode(&rsa_jwk.n)?)?;
-        let e = openssl::bn::BigNum::from_slice(&URL_SAFE_NO_PAD.decode(&rsa_jwk.e)?)?;
-        let rsa_public_key = Rsa::from_public_components(n, e)?;
-        let rsa_pkey = PKey::from_rsa(rsa_public_key)?;
-        let cert_pub_key = cert_chain[0].public_key()?;
-        if !cert_pub_key.public_eq(&rsa_pkey) {
+                    let allow = o.get("evaluation-result")
+                        .ok_or_else(|| {
+                            Error::msg(format!(
+                                "Can not found `evaluation-result` in evaluation-reports[{i}]: {o}"
+                            ))
+                        })?
+                        .get("allow").ok_or_else(|| {
+                            Error::msg(format!(
+                                "Can not found `evaluation-result.allow` in evaluation-reports[{i}]: {o}"
+                            ))
+                        })?.as_bool().ok_or_else(|| {
+                            Error::msg(format!(
+                                "The value of `evaluation-result.allow` should be bool type in evaluation-reports[{i}]: {o}"
+                            ))
+                        })?;
+
+                    Ok((policy_id, allow))
+                }).collect::<Result<Vec<_>>>()?;
+
+        if policy_ids_to_allows
+            .into_iter()
+            .any(|(policy_id, allow)| self.policy_ids.iter().any(|v| v == policy_id) && allow)
+        {
+            /* We accept the token when at least one of the expected policy ids has { "allow": true } */
             return Err(Error::msg(
-                "Certificate Public Key Mismatched in Attestation Token",
+                "The token is not acceptable since none of the policy ids check passed",
             ));
         }
 

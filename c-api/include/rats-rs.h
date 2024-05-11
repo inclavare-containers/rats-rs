@@ -17,12 +17,6 @@ typedef enum rats_rs_AsymmetricAlgo {
   RATS_RS_ASYMMETRIC_ALGO_P256,
 } rats_rs_AsymmetricAlgo;
 
-typedef enum rats_rs_AttesterType {
-  RATS_RS_ATTESTER_TYPE_AUTO,
-  RATS_RS_ATTESTER_TYPE_SGX_DCAP,
-  RATS_RS_ATTESTER_TYPE_TDX,
-} rats_rs_AttesterType;
-
 typedef enum rats_rs_ErrorKind {
   RATS_RS_ERROR_KIND_UNKNOWN,
   RATS_RS_ERROR_KIND_UNSUPPORTED_TEE_TYPE,
@@ -39,6 +33,11 @@ typedef enum rats_rs_ErrorKind {
   RATS_RS_ERROR_KIND_TDX_VERIFIER_GET_SUPPLEMENTAL_DATA_FAILED,
   RATS_RS_ERROR_KIND_TDX_MULFORMED_QUOTE,
   RATS_RS_ERROR_KIND_TDX_VERIFIER_REPORT_DATA_MISMATCH,
+  RATS_RS_ERROR_KIND_COCO_CONNECT_TTRPC_FAILED,
+  RATS_RS_ERROR_KIND_COCO_REQUEST_AA_FAILED,
+  RATS_RS_ERROR_KIND_COCO_REQUEST_AS_FAILED,
+  RATS_RS_ERROR_KIND_COCO_VERIFY_TOKEN_FAILED,
+  RATS_RS_ERROR_KIND_COCO_PARSE_TOKEN_FAILED,
   RATS_RS_ERROR_KIND_INVALID_PARAMETER,
   RATS_RS_ERROR_KIND_UNSUPPORTED_HASH_ALGO,
   RATS_RS_ERROR_KIND_CALCULATE_HASH_FAILED,
@@ -62,6 +61,12 @@ typedef enum rats_rs_HashAlgo {
   RATS_RS_HASH_ALGO_SHA384,
   RATS_RS_HASH_ALGO_SHA512,
 } rats_rs_HashAlgo;
+
+typedef enum rats_rs_LocalAttesterType {
+  RATS_RS_LOCAL_ATTESTER_TYPE_AUTO,
+  RATS_RS_LOCAL_ATTESTER_TYPE_SGX_DCAP,
+  RATS_RS_LOCAL_ATTESTER_TYPE_TDX,
+} rats_rs_LocalAttesterType;
 
 typedef enum rats_rs_LogLevel {
   RATS_RS_LOG_LEVEL_OFF = 0,
@@ -94,7 +99,29 @@ typedef enum rats_rs_HashAlgo rats_rs_hash_algo_t;
 
 typedef enum rats_rs_AsymmetricAlgo rats_rs_asymmetric_algo_t;
 
-typedef enum rats_rs_AttesterType rats_rs_attester_type_t;
+typedef enum rats_rs_LocalAttesterType rats_rs_local_attester_type_t;
+
+typedef enum rats_rs_AttesterType_Tag {
+  RATS_RS_ATTESTER_TYPE_LOCAL,
+  RATS_RS_ATTESTER_TYPE_COCO,
+} rats_rs_AttesterType_Tag;
+
+typedef struct rats_rs_Coco_Body {
+  const char *aa_addr;
+  int64_t timeout;
+} rats_rs_Coco_Body;
+
+typedef struct rats_rs_AttesterType {
+  rats_rs_AttesterType_Tag tag;
+  union {
+    struct {
+      rats_rs_local_attester_type_t local;
+    };
+    rats_rs_Coco_Body COCO;
+  };
+} rats_rs_AttesterType;
+
+typedef struct rats_rs_AttesterType rats_rs_attester_type_t;
 
 typedef enum rats_rs_ErrorKind rats_rs_error_kind_t;
 
@@ -128,19 +155,16 @@ typedef rats_rs_verify_policy_output_t (*rats_rs_custom_verifier_func)(const rat
                                                                        size_t claims_len,
                                                                        void *args);
 
-/**
- * Represents the different verification policies that can be applied to certificates.
- */
-typedef enum rats_rs_VerifiyPolicy_Tag {
+typedef enum rats_rs_ClaimsCheck_Tag {
   /**
    * Verifies if the certificate contains a specific set of claims.
    */
-  RATS_RS_VERIFIY_POLICY_CONTAINS,
+  RATS_RS_CLAIMS_CHECK_CONTAINS,
   /**
    * Enables the use of a custom verification function, providing flexibility for specialized validation logic.
    */
-  RATS_RS_VERIFIY_POLICY_CUSTOM,
-} rats_rs_VerifiyPolicy_Tag;
+  RATS_RS_CLAIMS_CHECK_CUSTOM,
+} rats_rs_ClaimsCheck_Tag;
 
 typedef struct rats_rs_Contains_Body {
   /**
@@ -164,11 +188,48 @@ typedef struct rats_rs_Custom_Body {
   void *args;
 } rats_rs_Custom_Body;
 
-typedef struct rats_rs_VerifiyPolicy {
-  rats_rs_VerifiyPolicy_Tag tag;
+typedef struct rats_rs_ClaimsCheck {
+  rats_rs_ClaimsCheck_Tag tag;
   union {
     rats_rs_Contains_Body CONTAINS;
     rats_rs_Custom_Body CUSTOM;
+  };
+} rats_rs_ClaimsCheck;
+
+typedef struct rats_rs_ClaimsCheck rats_rs_claims_check_t;
+
+/**
+ * Represents the different verification policies that can be applied to certificates.
+ */
+typedef enum rats_rs_VerifiyPolicy_Tag {
+  /**
+   * Verify with Local Attester
+   */
+  RATS_RS_VERIFIY_POLICY_LOCAL,
+  /**
+   * Verify with CoCo policies. Should be used only when peer is using CoCo Attester
+   */
+  RATS_RS_VERIFIY_POLICY_COCO,
+} rats_rs_VerifiyPolicy_Tag;
+
+typedef struct rats_rs_Local_Body {
+  rats_rs_claims_check_t claims_check;
+} rats_rs_Local_Body;
+
+typedef struct rats_rs_Coco_Body {
+  const char *as_addr;
+  const char *const *policy_ids;
+  size_t policy_ids_len;
+  const char *const *trusted_certs_paths;
+  size_t trusted_certs_paths_len;
+  rats_rs_claims_check_t claims_check;
+} rats_rs_Coco_Body;
+
+typedef struct rats_rs_VerifiyPolicy {
+  rats_rs_VerifiyPolicy_Tag tag;
+  union {
+    rats_rs_Local_Body LOCAL;
+    rats_rs_Coco_Body COCO;
   };
 } rats_rs_VerifiyPolicy;
 

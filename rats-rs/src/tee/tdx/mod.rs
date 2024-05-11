@@ -24,6 +24,7 @@ pub mod tests {
     use crate::{
         errors::*,
         tee::{
+            auto::LocalEvidence,
             claims::{BUILT_IN_CLAIM_COMMON_EVIDENCE, BUILT_IN_CLAIM_COMMON_TEE_TYPE},
             GenericAttester, GenericEvidence, GenericVerifier, TeeType,
         },

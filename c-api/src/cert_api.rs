@@ -1,19 +1,24 @@
 use rats_rs::cert::verify::{
-    CertVerifier, VerifiyPolicy as RatsRsVerifiyPolicy, VerifyPolicyOutput,
+    CertVerifier, ClaimsCheck as RatsRsClaimsCheck, VerifiyPolicy as RatsRsVerifiyPolicy,
+    VerifyPolicyOutput,
 };
 use rats_rs::crypto::{AsymmetricAlgo, AsymmetricPrivateKey, HashAlgo};
 use rats_rs::errors::*;
 use rats_rs::tee::claims::Claims;
+use rats_rs::tee::coco::attester::CocoAttester;
 use rats_rs::tee::sgx_dcap::attester::SgxDcapAttester;
 use rats_rs::tee::tdx::attester::TdxAttester;
 use rats_rs::{cert::create::CertBuilder, tee::auto::AutoAttester};
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::ffi::{c_char, c_void};
+use std::vec;
 use zeroize::Zeroizing;
 
 use crate::errors::error_obj_t;
-use crate::types::{asymmetric_algo_t, attester_type_t, hash_algo_t, AttesterType};
+use crate::types::{
+    asymmetric_algo_t, attester_type_t, hash_algo_t, AttesterType, LocalAttesterType,
+};
 
 /// Generates RATS X.509 Certificates, as part of the `rats-rs` certificate APIs.
 ///
@@ -119,8 +124,8 @@ fn rats_rs_create_cert_internal(
     privkey: Option<&[u8]>,
 ) -> Result<(String, Zeroizing<String>)> {
     macro_rules! attester_dispatch {
-        ($att_type:ty) => {{
-            let attester = <$att_type>::new();
+        ($attester:expr) => {{
+            let attester = $attester;
 
             let mut builder = CertBuilder::new(attester, hash_algo);
             if let Some(cert_subject) = cert_subject {
@@ -141,9 +146,18 @@ fn rats_rs_create_cert_internal(
     }
 
     Ok(match attester_type {
-        AttesterType::Auto => attester_dispatch!(AutoAttester),
-        AttesterType::SgxDcap => attester_dispatch!(SgxDcapAttester),
-        AttesterType::Tdx => attester_dispatch!(TdxAttester),
+        AttesterType::Local(local) => match local {
+            LocalAttesterType::Auto => attester_dispatch!(AutoAttester::new()),
+            LocalAttesterType::SgxDcap => attester_dispatch!(SgxDcapAttester::new()),
+            LocalAttesterType::Tdx => attester_dispatch!(TdxAttester::new()),
+        },
+        AttesterType::Coco { aa_addr, timeout } => {
+            let aa_addr = unsafe { CStr::from_ptr(aa_addr) }
+                .to_str()
+                .kind(ErrorKind::InvalidParameter)
+                .context("Invalid aa_addr")?;
+            attester_dispatch!(CocoAttester::new_with_timeout(aa_addr, timeout)?)
+        }
     })
 }
 
@@ -174,6 +188,24 @@ pub type claim_t = CClaim;
 /// Represents the different verification policies that can be applied to certificates.
 #[repr(C)]
 pub enum VerifiyPolicy {
+    /// Verify with Local Attester
+    Local { claims_check: claims_check_t },
+    /// Verify with CoCo policies. Should be used only when peer is using CoCo Attester
+    Coco {
+        as_addr: *const c_char,
+        policy_ids: *const *const c_char,
+        policy_ids_len: usize,
+        trusted_certs_paths: *const *const c_char,
+        trusted_certs_paths_len: usize,
+        claims_check: claims_check_t,
+    },
+}
+
+#[allow(non_camel_case_types)]
+pub type verifiy_policy_t = VerifiyPolicy;
+
+#[repr(C)]
+pub enum ClaimsCheck {
     /// Verifies if the certificate contains a specific set of claims.
     Contains {
         /// A pointer to an array of `claim_t` structures representing the required claims.
@@ -191,7 +223,7 @@ pub enum VerifiyPolicy {
 }
 
 #[allow(non_camel_case_types)]
-pub type verifiy_policy_t = VerifiyPolicy;
+pub type claims_check_t = ClaimsCheck;
 
 /// Signature of a custom verification function provided by the user.
 /// This function should implement the custom logic to verify certificate claims and return the result.
@@ -212,7 +244,84 @@ impl TryFrom<VerifiyPolicy> for RatsRsVerifiyPolicy {
 
     fn try_from(value: VerifiyPolicy) -> Result<Self> {
         Ok(match value {
-            VerifiyPolicy::Contains {
+            VerifiyPolicy::Local { claims_check } => {
+                RatsRsVerifiyPolicy::Local(claims_check.try_into()?)
+            }
+            VerifiyPolicy::Coco {
+                as_addr,
+                policy_ids: policy_ids_ptr,
+                policy_ids_len,
+                trusted_certs_paths: trusted_certs_paths_ptr,
+                trusted_certs_paths_len,
+                claims_check,
+            } => {
+                if as_addr.is_null() {
+                    return Err(Error::kind_with_msg(
+                        ErrorKind::InvalidParameter,
+                        "as_addr should not be null",
+                    ));
+                }
+                let as_addr = unsafe { CStr::from_ptr(as_addr) }.to_str()?.to_owned();
+
+                if policy_ids_ptr.is_null() {
+                    return Err(Error::kind_with_msg(
+                        ErrorKind::InvalidParameter,
+                        "policy_ids should not be null",
+                    ));
+                }
+                if policy_ids_len == 0 {
+                    return Err(Error::kind_with_msg(
+                        ErrorKind::InvalidParameter,
+                        "policy_ids_len should not be 0",
+                    ));
+                }
+                let mut policy_ids = vec![];
+                for policy_id in
+                    unsafe { &*std::ptr::slice_from_raw_parts(policy_ids_ptr, policy_ids_len) }
+                {
+                    let policy_id = unsafe { CStr::from_ptr(*policy_id) }.to_str()?;
+                    policy_ids.push(policy_id.to_owned())
+                }
+
+                let trusted_certs_paths = if trusted_certs_paths_len == 0 {
+                    None
+                } else {
+                    if trusted_certs_paths_ptr.is_null() {
+                        return Err(Error::kind_with_msg(
+                            ErrorKind::InvalidParameter,
+                            "policy_ids should not be null, when trusted_certs_paths_len is not 0",
+                        ));
+                    }
+                    let mut trusted_certs_paths = vec![];
+                    for path in unsafe {
+                        &*std::ptr::slice_from_raw_parts(
+                            trusted_certs_paths_ptr,
+                            trusted_certs_paths_len,
+                        )
+                    } {
+                        let path = unsafe { CStr::from_ptr(*path) }.to_str()?;
+                        trusted_certs_paths.push(path.to_owned())
+                    }
+                    Some(trusted_certs_paths)
+                };
+
+                RatsRsVerifiyPolicy::Coco {
+                    as_addr: as_addr,
+                    policy_ids: policy_ids,
+                    trusted_certs_paths: trusted_certs_paths,
+                    claims_check: claims_check.try_into()?,
+                }
+            }
+        })
+    }
+}
+
+impl TryFrom<ClaimsCheck> for RatsRsClaimsCheck {
+    type Error = Error;
+
+    fn try_from(value: ClaimsCheck) -> Result<Self> {
+        Ok(match value {
+            ClaimsCheck::Contains {
                 claims: c_claims_ptr,
                 claims_len: c_claims_len,
             } => {
@@ -235,9 +344,9 @@ impl TryFrom<VerifiyPolicy> for RatsRsVerifiyPolicy {
                         claims.insert(name.into(), value.into());
                     }
                 }
-                RatsRsVerifiyPolicy::Contains(claims)
+                RatsRsClaimsCheck::Contains(claims)
             }
-            VerifiyPolicy::Custom { func, args } => {
+            ClaimsCheck::Custom { func, args } => {
                 let f = move |claims: &Claims| {
                     let mut c_claims = vec![CClaim::default(); claims.len()];
                     let mut names = vec![]; // To make lifetime longer
@@ -252,7 +361,7 @@ impl TryFrom<VerifiyPolicy> for RatsRsVerifiyPolicy {
 
                     func(c_claims.as_ptr(), c_claims.len(), args)
                 };
-                RatsRsVerifiyPolicy::Custom(Box::new(f))
+                RatsRsClaimsCheck::Custom(Box::new(f))
             }
         })
     }

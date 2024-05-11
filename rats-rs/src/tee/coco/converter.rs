@@ -26,7 +26,7 @@ pub struct CocoConverter {
 }
 
 impl CocoConverter {
-    pub fn new(as_addr: &str, policy_ids: Vec<String>) -> Result<Self> {
+    pub fn new(as_addr: &str, policy_ids: &Vec<String>) -> Result<Self> {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
@@ -34,7 +34,10 @@ impl CocoConverter {
         let client =
             Mutex::new(rt.block_on(AttestationServiceClient::connect(as_addr.to_string()))?);
 
-        Ok(Self { client, policy_ids })
+        Ok(Self {
+            client,
+            policy_ids: policy_ids.to_owned(),
+        })
     }
 }
 

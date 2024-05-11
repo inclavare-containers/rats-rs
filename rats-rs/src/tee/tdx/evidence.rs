@@ -252,10 +252,6 @@ impl GenericEvidence for TdxEvidence {
         return DiceParseEvidenceOutput::NotMatch;
     }
 
-    fn get_tee_type(&self) -> TeeType {
-        TeeType::Tdx
-    }
-
     fn get_claims(&self) -> Result<Claims> {
         self.gen_claims_from_quote()
     }

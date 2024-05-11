@@ -23,6 +23,22 @@ pub enum DiceParseEvidenceOutput<T> {
     MatchButInvalid(Error),
     Ok(T),
 }
+
+impl<T> From<DiceParseEvidenceOutput<T>> for Result<T> {
+    fn from(value: DiceParseEvidenceOutput<T>) -> Self {
+        match value {
+            crate::tee::DiceParseEvidenceOutput::NotMatch => {
+                return Err(Error::kind_with_msg(
+                    ErrorKind::UnrecognizedEvidenceType,
+                    "Unrecognized evidence type",
+                ))
+            }
+            crate::tee::DiceParseEvidenceOutput::MatchButInvalid(e) => return Err(e),
+            crate::tee::DiceParseEvidenceOutput::Ok(v) => Ok(v),
+        }
+    }
+}
+
 /// Trait representing generic evidence.
 pub trait GenericEvidence: Any {
     /// Return the CBOR tag used for generating DICE cert.
@@ -38,9 +54,6 @@ pub trait GenericEvidence: Any {
     ) -> DiceParseEvidenceOutput<Self>
     where
         Self: Sized;
-
-    /// Return the type of Trusted Execution Environment (TEE) associated with the evidence.
-    fn get_tee_type(&self) -> TeeType;
 
     /// Parse the evidence and return a set of claims.
     fn get_claims(&self) -> Result<Claims>;

@@ -130,10 +130,6 @@ impl GenericEvidence for SgxDcapEvidence {
         return DiceParseEvidenceOutput::NotMatch;
     }
 
-    fn get_tee_type(&self) -> TeeType {
-        TeeType::SgxDcap
-    }
-
     fn get_claims(&self) -> Result<Claims> {
         super::claims::gen_claims_from_quote(self.as_quote())
     }
