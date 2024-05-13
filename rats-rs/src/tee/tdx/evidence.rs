@@ -153,7 +153,7 @@ impl TdxEvidence {
             return Err(Error::kind_with_msg(
                 ErrorKind::TdxUnsupportedEvidenceType,
                 format!(
-                    "Unsupported quote type, version: {:02x}, att_key_type: {:02x}, tee_type: {:02x}",
+                    "Unsupported TDX quote type, version: {:02x}, att_key_type: {:02x}, tee_type: {:02x}",
                     version, att_key_type, tee_type
                 ),
             ));
@@ -241,7 +241,12 @@ impl GenericEvidence for TdxEvidence {
         if cbor_tag == OCBR_TAG_EVIDENCE_INTEL_TEE_QUOTE {
             return match TdxEvidence::new_from_untrusted(raw_evidence) {
                 Ok(v) => DiceParseEvidenceOutput::Ok(v),
-                Err(e) => DiceParseEvidenceOutput::MatchButInvalid(e),
+                Err(e) => {
+                    if e.get_kind() == ErrorKind::SgxDcapUnsupportedEvidenceType {
+                        return DiceParseEvidenceOutput::NotMatch;
+                    }
+                    DiceParseEvidenceOutput::MatchButInvalid(e)
+                }
             };
         } else if cbor_tag == OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT {
             return DiceParseEvidenceOutput::MatchButInvalid(Error::kind_with_msg(
