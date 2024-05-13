@@ -109,8 +109,9 @@ int app_create_cert(bool no_privkey, rats_rs_attester_type_t attester_type,
     if (error_obj != NULL) {
         rats_rs_error_msg_t error_msg = rats_rs_err_get_msg_ref(error_obj);
         printf("Failed to generate certificate:\n");
-        printf("\tError kind: %#x, msg: %*s\n", rats_rs_err_get_kind(error_obj),
-               (int)error_msg.msg_len, error_msg.msg);
+        printf("\tError kind: %#x, msg: %.*s\n",
+               rats_rs_err_get_kind(error_obj), (int)error_msg.msg_len,
+               error_msg.msg);
         rats_rs_err_free(error_obj);
         goto err;
     }
@@ -162,8 +163,9 @@ int app_verify_cert(uint8_t *certificate, size_t certificate_len,
     } else {
         printf("Failed to verify cert\n");
         rats_rs_error_msg_t error_msg = rats_rs_err_get_msg_ref(error_obj);
-        printf("\tError kind: %#x, msg: %*s\n", rats_rs_err_get_kind(error_obj),
-               (int)error_msg.msg_len, error_msg.msg);
+        printf("\tError kind: %#x, msg: %.*s\n",
+               rats_rs_err_get_kind(error_obj), (int)error_msg.msg_len,
+               error_msg.msg);
         rats_rs_err_free(error_obj);
         ret = 1;
     }
