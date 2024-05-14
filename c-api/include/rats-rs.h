@@ -106,18 +106,29 @@ typedef enum rats_rs_AttesterType_Tag {
   RATS_RS_ATTESTER_TYPE_COCO,
 } rats_rs_AttesterType_Tag;
 
-typedef struct rats_rs_Coco_Body {
+typedef struct rats_rs_AttesterType_rats_rs_Local_Body {
+  /**
+   * The type of local attester.
+   */
+  rats_rs_local_attester_type_t type;
+} rats_rs_AttesterType_rats_rs_Local_Body;
+
+typedef struct rats_rs_AttesterType_rats_rs_Coco_Body {
+  /**
+   * The ttrpc unix domain socket address of attestation-agent to connect to.
+   */
   const char *aa_addr;
+  /**
+   * Timeout for ttrpc call to AA, should be nano seconds. Wait indefinitely when set to 0.
+   */
   int64_t timeout;
-} rats_rs_Coco_Body;
+} rats_rs_AttesterType_rats_rs_Coco_Body;
 
 typedef struct rats_rs_AttesterType {
   rats_rs_AttesterType_Tag tag;
   union {
-    struct {
-      rats_rs_local_attester_type_t local;
-    };
-    rats_rs_Coco_Body COCO;
+    rats_rs_AttesterType_rats_rs_Local_Body LOCAL;
+    rats_rs_AttesterType_rats_rs_Coco_Body COCO;
   };
 } rats_rs_AttesterType;
 
@@ -166,7 +177,7 @@ typedef enum rats_rs_ClaimsCheck_Tag {
   RATS_RS_CLAIMS_CHECK_CUSTOM,
 } rats_rs_ClaimsCheck_Tag;
 
-typedef struct rats_rs_Contains_Body {
+typedef struct rats_rs_ClaimsCheck_rats_rs_Contains_Body {
   /**
    * A pointer to an array of `claim_t` structures representing the required claims.
    */
@@ -175,9 +186,9 @@ typedef struct rats_rs_Contains_Body {
    * The number of claims in the `claims` array.
    */
   size_t claims_len;
-} rats_rs_Contains_Body;
+} rats_rs_ClaimsCheck_rats_rs_Contains_Body;
 
-typedef struct rats_rs_Custom_Body {
+typedef struct rats_rs_ClaimsCheck_rats_rs_Custom_Body {
   /**
    * A function pointer to the custom verification function that will be invoked.
    */
@@ -186,13 +197,13 @@ typedef struct rats_rs_Custom_Body {
    * A pointer to arbitrary data that will be passed to the custom verification function.
    */
   void *args;
-} rats_rs_Custom_Body;
+} rats_rs_ClaimsCheck_rats_rs_Custom_Body;
 
 typedef struct rats_rs_ClaimsCheck {
   rats_rs_ClaimsCheck_Tag tag;
   union {
-    rats_rs_Contains_Body CONTAINS;
-    rats_rs_Custom_Body CUSTOM;
+    rats_rs_ClaimsCheck_rats_rs_Contains_Body CONTAINS;
+    rats_rs_ClaimsCheck_rats_rs_Custom_Body CUSTOM;
   };
 } rats_rs_ClaimsCheck;
 
@@ -212,24 +223,24 @@ typedef enum rats_rs_VerifiyPolicy_Tag {
   RATS_RS_VERIFIY_POLICY_COCO,
 } rats_rs_VerifiyPolicy_Tag;
 
-typedef struct rats_rs_Local_Body {
+typedef struct rats_rs_VerifiyPolicy_rats_rs_Local_Body {
   rats_rs_claims_check_t claims_check;
-} rats_rs_Local_Body;
+} rats_rs_VerifiyPolicy_rats_rs_Local_Body;
 
-typedef struct rats_rs_Coco_Body {
+typedef struct rats_rs_VerifiyPolicy_rats_rs_Coco_Body {
   const char *as_addr;
   const char *const *policy_ids;
   size_t policy_ids_len;
   const char *const *trusted_certs_paths;
   size_t trusted_certs_paths_len;
   rats_rs_claims_check_t claims_check;
-} rats_rs_Coco_Body;
+} rats_rs_VerifiyPolicy_rats_rs_Coco_Body;
 
 typedef struct rats_rs_VerifiyPolicy {
   rats_rs_VerifiyPolicy_Tag tag;
   union {
-    rats_rs_Local_Body LOCAL;
-    rats_rs_Coco_Body COCO;
+    rats_rs_VerifiyPolicy_rats_rs_Local_Body LOCAL;
+    rats_rs_VerifiyPolicy_rats_rs_Coco_Body COCO;
   };
 } rats_rs_VerifiyPolicy;
 

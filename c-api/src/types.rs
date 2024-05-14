@@ -23,9 +23,14 @@ pub type local_attester_type_t = LocalAttesterType;
 #[derive(Debug, PartialEq)]
 #[repr(C)]
 pub enum AttesterType {
-    Local(local_attester_type_t),
+    Local {
+        /// The type of local attester.
+        r#type: local_attester_type_t,
+    },
     Coco {
+        /// The ttrpc unix domain socket address of attestation-agent to connect to.
         aa_addr: *const c_char,
+        /// Timeout for ttrpc call to AA, should be nano seconds. Wait indefinitely when set to 0.  
         timeout: i64,
     },
 }

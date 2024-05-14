@@ -146,7 +146,7 @@ fn rats_rs_create_cert_internal(
     }
 
     Ok(match attester_type {
-        AttesterType::Local(local) => match local {
+        AttesterType::Local { r#type } => match r#type {
             LocalAttesterType::Auto => attester_dispatch!(AutoAttester::new()),
             LocalAttesterType::SgxDcap => attester_dispatch!(SgxDcapAttester::new()),
             LocalAttesterType::Tdx => attester_dispatch!(TdxAttester::new()),
