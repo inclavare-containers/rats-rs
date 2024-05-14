@@ -3,7 +3,7 @@ use crate::{errors::*, tee::GenericVerifier};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use log::debug;
+use log::{debug, error, trace};
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
@@ -13,6 +13,7 @@ use openssl::x509::store::{X509Store, X509StoreBuilder};
 use openssl::x509::{X509StoreContext, X509};
 use serde_json::Value;
 
+use std::collections::HashMap;
 use std::fmt::format;
 use std::sync::Mutex;
 
@@ -54,6 +55,7 @@ impl CocoVerifier {
     }
 
     fn verify_evidence_internal(&self, evidence: &CocoAsToken, report_data: &[u8]) -> Result<()> {
+        debug!("Verify token with policy ids: {:?}", self.policy_ids);
         let token = evidence.as_str();
         let split_token: Vec<&str> = token.split('.').collect();
         if !split_token.len() == 3 {
@@ -127,7 +129,7 @@ impl CocoVerifier {
         /* Check that the key used for signing the JWT is valid */
         match &self.trusted_certs {
             None => {
-                log::warn!("No Trusted Certificate in Config, skip verification of JWK cert of Attestation Token");
+                log::warn!("No trusted certificate provided, skip verification of JWK cert of Attestation Token");
             }
             Some(trusted_store) => {
                 let mut cert_chain: Vec<X509> = vec![];
@@ -214,16 +216,23 @@ impl CocoVerifier {
                         })?;
 
                     Ok((policy_id, allow))
-                }).collect::<Result<Vec<_>>>()?;
+                }).collect::<Result<HashMap<_,_>>>()?;
 
-        if policy_ids_to_allows
-            .into_iter()
-            .any(|(policy_id, allow)| self.policy_ids.iter().any(|v| v == policy_id) && allow)
-        {
-            /* We accept the token when at least one of the expected policy ids has { "allow": true } */
-            return Err(Error::msg(
-                "The token is not acceptable since none of the policy ids check passed",
-            ));
+        /* We accept the token only when all of the expected policy ids has { "allow": true } */
+        for policy_id in &self.policy_ids {
+            match policy_ids_to_allows.get(policy_id.as_str()) {
+                Some(true) => {/* OK */}
+                Some(false) => {
+                    return Err(Error::msg(format!(
+                        "The token is not acceptable due to evaluation failure on policy_id `{policy_id}`"
+                    )))
+                }
+                None => {
+                    return Err(Error::msg(format!(
+                        "The token is not acceptable due to missing evaluation results on policy_id `{policy_id}`"
+                    )))
+                }
+            }
         }
 
         Ok(())

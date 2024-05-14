@@ -2,6 +2,7 @@ use std::sync::Mutex;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use log::debug;
 use serde_json::json;
 use tokio::runtime::Runtime;
 
@@ -63,6 +64,11 @@ impl GenericConverter for CocoConverter {
     type OutEvidence = CocoAsToken;
 
     fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence> {
+        debug!(
+            "Convert CoCo evidence to CoCo AS token with policy ids: {:?}",
+            self.policy_ids
+        );
+
         let runtime_data_hash_algorithm = match in_evidence.get_aa_runtime_data_hash_algo() {
             HashAlgo::Sha256 => "sha256",
             HashAlgo::Sha384 => "sha384",
