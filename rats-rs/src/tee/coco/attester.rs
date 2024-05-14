@@ -2,7 +2,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 
 use super::ttrpc_protocol::attestation_agent::GetEvidenceRequest;
-use super::DEFAULT_TIMEOUT;
+use super::TTRPC_DEFAULT_TIMEOUT;
 use super::{
     evidence::CocoEvidence, ttrpc_protocol::attestation_agent_ttrpc::AttestationAgentServiceClient,
 };
@@ -17,13 +17,16 @@ pub struct CocoAttester {
 
 impl CocoAttester {
     pub fn new(aa_addr: &str) -> Result<Self> {
-        Self::new_with_timeout(aa_addr, DEFAULT_TIMEOUT)
+        Self::new_with_timeout(aa_addr, TTRPC_DEFAULT_TIMEOUT)
     }
 
     pub fn new_with_timeout(aa_addr: &str, timeout: i64) -> Result<Self> {
         let inner = ttrpc::Client::connect(aa_addr)
             .kind(ErrorKind::CocoConnectTtrpcFailed)
-            .context(format!("ttrpc connect to AA addr: {} failed!", aa_addr))?;
+            .context(format!(
+                "Failed to connect to attestation-agent ttrpc address {}",
+                aa_addr
+            ))?;
         let client = AttestationAgentServiceClient::new(inner);
         Ok(Self { client, timeout })
     }

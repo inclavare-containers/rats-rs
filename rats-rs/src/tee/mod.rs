@@ -82,6 +82,31 @@ pub trait GenericConverter {
     fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence>;
 }
 
+pub struct AttesterPipeline<A: GenericAttester, C: GenericConverter<InEvidence = A::Evidence>> {
+    attester: A,
+    converter: C,
+}
+
+impl<A: GenericAttester, C: GenericConverter<InEvidence = A::Evidence>> AttesterPipeline<A, C> {
+    pub fn new(attester: A, converter: C) -> Self {
+        Self {
+            attester,
+            converter,
+        }
+    }
+}
+
+impl<A: GenericAttester, C: GenericConverter<InEvidence = A::Evidence>> GenericAttester
+    for AttesterPipeline<A, C>
+{
+    type Evidence = C::OutEvidence;
+
+    fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
+        let evidence = self.attester.get_evidence(report_data)?;
+        self.converter.convert(&evidence)
+    }
+}
+
 /// Enum representing different types of TEEs.
 #[derive(Debug, PartialEq, EnumIter, Clone, Copy)]
 pub enum TeeType {

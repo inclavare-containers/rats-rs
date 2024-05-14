@@ -31,8 +31,12 @@ impl CocoConverter {
             .enable_all()
             .build()?;
         // TODO: change to .await when async in rats-rs is ready
-        let client =
-            Mutex::new(rt.block_on(AttestationServiceClient::connect(as_addr.to_string()))?);
+        let client = Mutex::new(
+            rt.block_on(AttestationServiceClient::connect(as_addr.to_string()))
+                .with_context(|| {
+                    format!("Failed to connect attestation-service grpc address {as_addr}",)
+                })?,
+        );
 
         Ok(Self {
             client,
