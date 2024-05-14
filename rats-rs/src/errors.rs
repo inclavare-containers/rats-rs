@@ -159,6 +159,16 @@ impl From<spdmlib::error::SpdmStatus> for Error {
     }
 }
 
+#[cfg(feature = "coco")]
+impl From<tonic::Status> for Error {
+    fn from(value: tonic::Status) -> Self {
+        Error::kind_with_msg(
+            ErrorKind::Unknown,
+            format!("tonic status: {:?} msg: {}", value.code(), value.message()),
+        )
+    }
+}
+
 pub trait WithContext<T> {
     fn kind(self, kind: ErrorKind) -> Result<T>;
 

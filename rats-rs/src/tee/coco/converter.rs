@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use serde_json::json;
+use tokio::runtime::Runtime;
 
 use self::as_api::attestation_request::RuntimeData;
 use self::as_api::attestation_service_client::AttestationServiceClient;
@@ -21,24 +22,27 @@ pub mod as_api {
 }
 
 pub struct CocoConverter {
+    tokio_rt: Runtime,
     client: Mutex<AttestationServiceClient<tonic::transport::Channel>>,
     policy_ids: Vec<String>,
 }
 
 impl CocoConverter {
     pub fn new(as_addr: &str, policy_ids: &Vec<String>) -> Result<Self> {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let tokio_rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
         // TODO: change to .await when async in rats-rs is ready
         let client = Mutex::new(
-            rt.block_on(AttestationServiceClient::connect(as_addr.to_string()))
+            tokio_rt
+                .block_on(AttestationServiceClient::connect(as_addr.to_string()))
                 .with_context(|| {
                     format!("Failed to connect attestation-service grpc address {as_addr}",)
                 })?,
         );
 
         Ok(Self {
+            tokio_rt,
             client,
             policy_ids: policy_ids.to_owned(),
         })
@@ -77,12 +81,9 @@ impl GenericConverter for CocoConverter {
             runtime_data_hash_algorithm: runtime_data_hash_algorithm.into(),
         });
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
-
         let mut client = self.client.lock()?;
-        let response: AttestationResponse = rt
+        let response: AttestationResponse = self
+            .tokio_rt
             .block_on(client.attestation_evaluate(request))
             .context("Call attestation_evaluate() on AS via grpc failed")?
             .into_inner();
