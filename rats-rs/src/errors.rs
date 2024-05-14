@@ -185,7 +185,8 @@ where
     where
         C: Display,
     {
-        self.map_err(|error| Into::<Error>::into(error).with_msg(context))
+        self.map_err(|error| Into::<Error>::into(error))
+            .context(context)
     }
 
     default fn with_context<C, F>(self, f: F) -> Result<T>
