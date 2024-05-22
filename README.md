@@ -15,6 +15,7 @@ rats-rs是一个纯Rust实现的TEE远程证明库，它的最终目标是让开
 - 支持指定证书使用的加密算法
 - 自动检测当前运环境TEE类型
 - 支持基于features的功能剪裁
+- 提供C API调用和CMake构建
 
 ## 支持的TEE类型
 <!-- Supported TEE types -->
@@ -88,6 +89,7 @@ rats-rs = {git = "https://github.com/inclavare-containers/rats-rs", branch = "ma
 大部分文档都归类在[docs](/docs/)目录下，这里列举出一些相对重要的文档，方便开始接触本项目。
 
 - [环境搭建与项目构建指引](/docs/how-to-build.md)
+- [C API的构建与使用](/c-api/README.md)
 - [测试指引与代码覆盖率](/docs/how-to-run-test.md)
 - [项目整体架构与模块功能描述](/docs/architecture-of-the-project.md)
 - [CPU-SPDM协议核心设计思路](/docs/core-design-of-cpu-spdm.md)
