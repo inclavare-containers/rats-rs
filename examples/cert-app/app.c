@@ -48,7 +48,8 @@ int app_startup(bool no_privkey, const rats_rs_claim_t *custom_claims,
     size_t expected_claims_len = custom_claims_len;
 
     ret = app_verify_cert(certificate, certificate_len, expected_claims,
-                          expected_claims_len);
+                          expected_claims_len,
+                          attester_type.tag == RATS_RS_ATTESTER_TYPE_COCO);
     if (ret) {
         printf("Certificate verification:\tFAILED\n");
         goto err;
@@ -136,17 +137,41 @@ err:
 
 int app_verify_cert(uint8_t *certificate, size_t certificate_len,
                     const rats_rs_claim_t *expected_claims,
-                    size_t expected_claims_len) {
+                    size_t expected_claims_len, bool is_coco) {
     int ret = -1;
 
     printf("\n");
     printf("Verify certificate with rats-rs now ...\n");
 
     /* Verify certificate */
-    rats_rs_verifiy_policy_t verifiy_policy = {
-        .tag = RATS_RS_VERIFIY_POLICY_CONTAINS,
-        .CONTAINS = {.claims = expected_claims,
-                     .claims_len = expected_claims_len}};
+    rats_rs_verifiy_policy_t verifiy_policy;
+
+    const char *policy_ids[] = {"default"};
+    if (is_coco) {
+        verifiy_policy = (rats_rs_verifiy_policy_t){
+            .tag = RATS_RS_VERIFIY_POLICY_COCO,
+            .COCO = {
+                .verify_mode = {.tag = RATS_RS_COCO_VERIFY_MODE_EVIDENCE,
+                                .EVIDENCE = {.as_addr =
+                                                 "http://127.0.0.1:50004"}},
+                .policy_ids = policy_ids,
+                .policy_ids_len = sizeof(policy_ids) / sizeof(policy_ids[0]),
+                .trusted_certs_paths = NULL,
+                .trusted_certs_paths_len = 0,
+                .claims_check = {
+                    .tag = RATS_RS_CLAIMS_CHECK_CONTAINS,
+                    .CONTAINS = {.claims = expected_claims,
+                                 .claims_len = expected_claims_len},
+                }}};
+    } else {
+        verifiy_policy = (rats_rs_verifiy_policy_t){
+            .tag = RATS_RS_VERIFIY_POLICY_LOCAL,
+            .LOCAL = {.claims_check = {
+                          .tag = RATS_RS_CLAIMS_CHECK_CONTAINS,
+                          .CONTAINS = {.claims = expected_claims,
+                                       .claims_len = expected_claims_len},
+                      }}};
+    }
 
     rats_rs_verify_policy_output_t verify_policy_output =
         RATS_RS_VERIFY_POLICY_OUTPUT_FAILED;

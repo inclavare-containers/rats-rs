@@ -11,7 +11,7 @@ int app_create_cert(bool no_privkey, rats_rs_attester_type_t attester_type,
 
 int app_verify_cert(uint8_t *certificate, size_t certificate_len,
                     const rats_rs_claim_t *expected_claims,
-                    size_t expected_claims_len);
+                    size_t expected_claims_len, bool is_coco);
 
 int export_cert(const char *cert_file_path, uint8_t *certificate,
                 size_t certificate_size);

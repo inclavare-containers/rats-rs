@@ -62,10 +62,13 @@ int main() {
     size_t privkey_len = 0;
     uint8_t *certificate = NULL;
     size_t certificate_len = 0;
+    rats_rs_attester_type_t attester_type = {
+        .tag = RATS_RS_ATTESTER_TYPE_LOCAL,
+        .LOCAL = {.type = RATS_RS_LOCAL_ATTESTER_TYPE_AUTO}};
     rats_rs_error_obj_t *error_obj = rats_rs_create_cert(
         "CN=Demo App,O=Inclavare Containers", RATS_RS_HASH_ALGO_SHA256,
-        RATS_RS_ASYMMETRIC_ALGO_P256, RATS_RS_ATTESTER_TYPE_AUTO, NULL, 0,
-        &privkey, &privkey_len, &certificate, &certificate_len);
+        RATS_RS_ASYMMETRIC_ALGO_P256, attester_type, NULL, 0, &privkey,
+        &privkey_len, &certificate, &certificate_len);
 
     if (error_obj == NULL) {
         printf("Create cert successfully\n");
@@ -82,11 +85,17 @@ int main() {
     }
 
     /* Verify cert */
-    rats_rs_verifiy_policy_t verifiy_policy = {
-        .tag = RATS_RS_VERIFIY_POLICY_CONTAINS,
+    rats_rs_claim_t expected_claims[] = {
         /* Replace with your expected claims here */
-        .CONTAINS = {.claims = NULL, .claims_len = 0}};
-
+    };
+    rats_rs_verifiy_policy_t verifiy_policy = {
+        .tag = RATS_RS_VERIFIY_POLICY_LOCAL,
+        .LOCAL = {.claims_check = {
+                      .tag = RATS_RS_CLAIMS_CHECK_CONTAINS,
+                      .CONTAINS = {.claims = expected_claims,
+                                   .claims_len = sizeof(expected_claims) /
+                                                 sizeof(expected_claims[0])},
+                  }}};
     rats_rs_verify_policy_output_t verify_policy_output =
         RATS_RS_VERIFY_POLICY_OUTPUT_FAILED;
     error_obj = rats_rs_verify_cert(certificate, certificate_len,

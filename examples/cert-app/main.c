@@ -27,7 +27,9 @@ int main(int argc, char **argv) {
     bool no_privkey = false;
     rats_rs_claim_t claims[64];
     size_t claims_count = 0;
-    rats_rs_attester_type_t attester_type = RATS_RS_ATTESTER_TYPE_AUTO;
+    rats_rs_attester_type_t attester_type = {
+        .tag = RATS_RS_ATTESTER_TYPE_LOCAL,
+        .LOCAL = {.type = RATS_RS_LOCAL_ATTESTER_TYPE_AUTO}};
     rats_rs_log_level_t log_level = RATS_RS_LOG_LEVEL_ERROR;
     int opt;
 
@@ -59,17 +61,33 @@ int main(int argc, char **argv) {
             claims_count++;
             break;
         case 'a':
-            if (!strcasecmp(optarg, "auto"))
-                attester_type = RATS_RS_ATTESTER_TYPE_AUTO;
+            if (!strcasecmp(optarg, "coco"))
+                // TODO: allow specific aa address in cmdline arguments
+                attester_type = (rats_rs_attester_type_t){
+                    .tag = RATS_RS_ATTESTER_TYPE_COCO,
+                    .COCO = {
+                        .attest_mode = {.tag =
+                                            RATS_RS_COCO_ATTEST_MODE_EVIDENCE},
+                        .aa_addr = "unix:///tmp/attestation.sock",
+                        .timeout = 0}};
+            else if (!strcasecmp(optarg, "auto"))
+                attester_type = (rats_rs_attester_type_t){
+                    .tag = RATS_RS_ATTESTER_TYPE_LOCAL,
+                    .LOCAL = {.type = RATS_RS_LOCAL_ATTESTER_TYPE_AUTO}};
             else if (!strcasecmp(optarg, "sgx-dcap"))
-                attester_type = RATS_RS_ATTESTER_TYPE_SGX_DCAP;
+                attester_type = (rats_rs_attester_type_t){
+                    .tag = RATS_RS_ATTESTER_TYPE_LOCAL,
+                    .LOCAL = {.type = RATS_RS_LOCAL_ATTESTER_TYPE_SGX_DCAP}};
             else if (!strcasecmp(optarg, "tdx"))
-                attester_type = RATS_RS_ATTESTER_TYPE_TDX;
-            else
+                attester_type = (rats_rs_attester_type_t){
+                    .tag = RATS_RS_ATTESTER_TYPE_LOCAL,
+                    .LOCAL = {.type = RATS_RS_LOCAL_ATTESTER_TYPE_TDX}};
+            else {
                 printf("ERROR: unknown log level `%s` Supported attester type: "
                        "auto, sgx-ecdsa, tdx\n",
                        optarg);
-            exit(1);
+                exit(1);
+            }
             break;
         case 'l':
             if (!strcasecmp(optarg, "trace"))
@@ -100,7 +118,7 @@ int main(int argc, char **argv) {
 			     "    Options:\n\n"
 			     "        --no-privkey/-k               Set to enable key pairs generation in rats-rs\n"
 			     "        --add-claim/-C key:val        Add a user-defined custom claims\n"
-			     "        --attester/-a value           Set the type of quote attester. (Should be one of: auto, sgx-ecdsa, tdx)\n"
+			     "        --attester/-a value           Set the type of quote attester. (Should be one of: coco, auto, sgx-ecdsa, tdx)\n"
 			     "        --log-level/-l                Set the log level. (Should be one of: off, error, warn, info, debug, trace. Default: error)\n"
 			     "        --help/-h                     Show the usage\n"
             );
