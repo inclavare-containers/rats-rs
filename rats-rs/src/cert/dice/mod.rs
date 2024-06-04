@@ -26,10 +26,14 @@ pub(crate) fn generate_and_sign_dice_cert(
     let validity = Validity::from_now(Duration::new(60, 0))
         .kind(ErrorKind::GenCertError)
         .context("bad validity value")?;
-    let profile = Profile::Root;
     let subject = Name::from_str(subject)
         .kind(ErrorKind::GenCertError)
         .with_context(|| format!("bad subject value `{}`", subject))?;
+    let profile = Profile::Leaf {
+        issuer: subject.clone(),
+        enable_key_agreement: true,
+        enable_key_encipherment: true,
+    };
 
     let pub_key_info = match private_key {
         AsymmetricPrivateKey::Rsa2048(key)

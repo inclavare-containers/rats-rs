@@ -38,7 +38,7 @@ impl CocoConverter {
             tokio_rt
                 .block_on(AttestationServiceClient::connect(as_addr.to_string()))
                 .with_context(|| {
-                    format!("Failed to connect attestation-service grpc address {as_addr}",)
+                    format!("Failed to connect attestation-service grpc address `{as_addr}`",)
                 })?,
         );
 

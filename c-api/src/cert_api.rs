@@ -325,7 +325,9 @@ impl TryFrom<VerifyPolicy> for RatsRsVerifyPolicy {
                             trusted_certs_paths_len,
                         )
                     } {
-                        let path = unsafe { CStr::from_ptr(*path) }.to_str()?;
+                        let path = unsafe { CStr::from_ptr(*path) }
+                            .to_str()
+                            .context("bad trusted_certs_path")?;
                         trusted_certs_paths.push(path.to_owned())
                     }
                     Some(trusted_certs_paths)
@@ -360,7 +362,9 @@ fn ffi_convert_policy_ids(
     }
     let mut policy_ids = vec![];
     for policy_id in unsafe { &*std::ptr::slice_from_raw_parts(policy_ids_ptr, policy_ids_len) } {
-        let policy_id = unsafe { CStr::from_ptr(*policy_id) }.to_str()?;
+        let policy_id = unsafe { CStr::from_ptr(*policy_id) }
+            .to_str()
+            .context("bad policy_id")?;
         policy_ids.push(policy_id.to_owned())
     }
 
@@ -374,7 +378,10 @@ fn ffi_convert_as_addr(as_addr: *const c_char) -> Result<String> {
             "as_addr should not be null",
         ));
     }
-    let as_addr = unsafe { CStr::from_ptr(as_addr) }.to_str()?.to_owned();
+    let as_addr = unsafe { CStr::from_ptr(as_addr) }
+        .to_str()
+        .context("bad as_addr")?
+        .to_owned();
     Ok(as_addr)
 }
 
