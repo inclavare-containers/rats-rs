@@ -330,6 +330,10 @@ typedef struct rats_rs_VerifyPolicy {
 
 typedef struct rats_rs_VerifyPolicy rats_rs_verify_policy_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
 /**
  * Generates RATS X.509 Certificates, as part of the `rats-rs` certificate APIs.
  *
@@ -420,5 +424,9 @@ rats_rs_error_obj_t *rats_rs_verify_cert(const uint8_t *certificate,
                                          size_t certificate_len,
                                          rats_rs_verify_policy_t verify_policy,
                                          rats_rs_verify_policy_output_t *verify_policy_output_out);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif // __cplusplus
 
 #endif /* _RATS_H_ */
