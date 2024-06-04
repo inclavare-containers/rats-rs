@@ -278,22 +278,22 @@ typedef struct rats_rs_CocoVerifyMode rats_rs_coco_verify_mode_t;
 /**
  * Represents the different verification policies that can be applied to certificates.
  */
-typedef enum rats_rs_VerifiyPolicy_Tag {
+typedef enum rats_rs_VerifyPolicy_Tag {
   /**
    * Verify with Local Attester
    */
-  RATS_RS_VERIFIY_POLICY_LOCAL,
+  RATS_RS_VERIFY_POLICY_LOCAL,
   /**
    * Verify with CoCo policies. Should be used only when peer is using CoCo Attester
    */
-  RATS_RS_VERIFIY_POLICY_COCO,
-} rats_rs_VerifiyPolicy_Tag;
+  RATS_RS_VERIFY_POLICY_COCO,
+} rats_rs_VerifyPolicy_Tag;
 
-typedef struct rats_rs_VerifiyPolicy_rats_rs_Local_Body {
+typedef struct rats_rs_VerifyPolicy_rats_rs_Local_Body {
   rats_rs_claims_check_t claims_check;
-} rats_rs_VerifiyPolicy_rats_rs_Local_Body;
+} rats_rs_VerifyPolicy_rats_rs_Local_Body;
 
-typedef struct rats_rs_VerifiyPolicy_rats_rs_Coco_Body {
+typedef struct rats_rs_VerifyPolicy_rats_rs_Coco_Body {
   /**
    * The verify mode to select
    */
@@ -318,17 +318,17 @@ typedef struct rats_rs_VerifiyPolicy_rats_rs_Coco_Body {
    * Additional strategy for checking cliams (both builtin claims and custom claims)
    */
   rats_rs_claims_check_t claims_check;
-} rats_rs_VerifiyPolicy_rats_rs_Coco_Body;
+} rats_rs_VerifyPolicy_rats_rs_Coco_Body;
 
-typedef struct rats_rs_VerifiyPolicy {
-  rats_rs_VerifiyPolicy_Tag tag;
+typedef struct rats_rs_VerifyPolicy {
+  rats_rs_VerifyPolicy_Tag tag;
   union {
-    rats_rs_VerifiyPolicy_rats_rs_Local_Body LOCAL;
-    rats_rs_VerifiyPolicy_rats_rs_Coco_Body COCO;
+    rats_rs_VerifyPolicy_rats_rs_Local_Body LOCAL;
+    rats_rs_VerifyPolicy_rats_rs_Coco_Body COCO;
   };
-} rats_rs_VerifiyPolicy;
+} rats_rs_VerifyPolicy;
 
-typedef struct rats_rs_VerifiyPolicy rats_rs_verifiy_policy_t;
+typedef struct rats_rs_VerifyPolicy rats_rs_verify_policy_t;
 
 /**
  * Generates RATS X.509 Certificates, as part of the `rats-rs` certificate APIs.
@@ -402,7 +402,7 @@ void rats_rs_set_log_level(rats_rs_log_level_t log_level);
  *
  * * `certificate` - A pointer to the PEM-encoded certificate data to be verified.
  * * `certificate_len` - The size of the certificate data content in bytes.
- * * `verifiy_policy` - An enum specifying the verification policy. See `verifiy_policy_t` for details.
+ * * `verify_policy` - An enum specifying the verification policy. See `verify_policy_t` for details.
  * * `verify_policy_output_out` - A mutable pointer where the result of the verification will be stored. See `See `verify_policy_output_t` for details.`
  *
  * # Returns
@@ -418,7 +418,7 @@ void rats_rs_set_log_level(rats_rs_log_level_t log_level);
  */
 rats_rs_error_obj_t *rats_rs_verify_cert(const uint8_t *certificate,
                                          size_t certificate_len,
-                                         rats_rs_verifiy_policy_t verifiy_policy,
+                                         rats_rs_verify_policy_t verify_policy,
                                          rats_rs_verify_policy_output_t *verify_policy_output_out);
 
 #endif /* _RATS_H_ */

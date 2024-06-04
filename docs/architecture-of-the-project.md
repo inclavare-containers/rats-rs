@@ -54,7 +54,7 @@ pub trait GenericAttester {
 pub trait GenericVerifier {
     type Evidence: GenericEvidence;
 
-    /// Verifiy the provided evidence with the Trust Anchor and checking the report data matches the one in the evidence.
+    /// Verify the provided evidence with the Trust Anchor and checking the report data matches the one in the evidence.
     fn verify_evidence(
         &self,
         evidence: &Self::Evidence,

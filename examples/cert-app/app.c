@@ -144,12 +144,12 @@ int app_verify_cert(uint8_t *certificate, size_t certificate_len,
     printf("Verify certificate with rats-rs now ...\n");
 
     /* Verify certificate */
-    rats_rs_verifiy_policy_t verifiy_policy;
+    rats_rs_verify_policy_t verify_policy;
 
     const char *policy_ids[] = {"default"};
     if (is_coco) {
-        verifiy_policy = (rats_rs_verifiy_policy_t){
-            .tag = RATS_RS_VERIFIY_POLICY_COCO,
+        verify_policy = (rats_rs_verify_policy_t){
+            .tag = RATS_RS_VERIFY_POLICY_COCO,
             .COCO = {
                 .verify_mode = {.tag = RATS_RS_COCO_VERIFY_MODE_EVIDENCE,
                                 .EVIDENCE = {.as_addr =
@@ -164,8 +164,8 @@ int app_verify_cert(uint8_t *certificate, size_t certificate_len,
                                  .claims_len = expected_claims_len},
                 }}};
     } else {
-        verifiy_policy = (rats_rs_verifiy_policy_t){
-            .tag = RATS_RS_VERIFIY_POLICY_LOCAL,
+        verify_policy = (rats_rs_verify_policy_t){
+            .tag = RATS_RS_VERIFY_POLICY_LOCAL,
             .LOCAL = {.claims_check = {
                           .tag = RATS_RS_CLAIMS_CHECK_CONTAINS,
                           .CONTAINS = {.claims = expected_claims,
@@ -176,7 +176,7 @@ int app_verify_cert(uint8_t *certificate, size_t certificate_len,
     rats_rs_verify_policy_output_t verify_policy_output =
         RATS_RS_VERIFY_POLICY_OUTPUT_FAILED;
     rats_rs_error_obj_t *error_obj = rats_rs_verify_cert(
-        certificate, certificate_len, verifiy_policy, &verify_policy_output);
+        certificate, certificate_len, verify_policy, &verify_policy_output);
 
     if (error_obj == NULL) {
         printf("Verify cert result:\t%s\n",

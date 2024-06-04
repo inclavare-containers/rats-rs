@@ -24,7 +24,7 @@ use signature::Verifier;
 use x509_cert::Certificate;
 
 /// Represents the different verification policies that can be applied to certificates.
-pub enum VerifiyPolicy {
+pub enum VerifyPolicy {
     /// Verify with Local Attester
     Local(ClaimsCheck),
     /// Verify with CoCo policies. Should be used only when peer is using CoCo Attester
@@ -69,12 +69,12 @@ pub enum VerifyPolicyOutput {
 
 #[allow(dead_code)]
 pub struct CertVerifier {
-    policy: VerifiyPolicy,
+    policy: VerifyPolicy,
 }
 
 #[allow(dead_code)]
 impl CertVerifier {
-    pub fn new(policy: VerifiyPolicy) -> Self {
+    pub fn new(policy: VerifyPolicy) -> Self {
         Self { policy }
     }
 
@@ -120,7 +120,7 @@ impl CertVerifier {
 
         /* Parse evidence, verify evidence and get builtin claims */
         let builtin_claims = match &self.policy {
-            VerifiyPolicy::Local(_) => {
+            VerifyPolicy::Local(_) => {
                 let evidence = Into::<Result<_>>::into(
                         AutoEvidence::create_evidence_from_dice(cbor_tag, &raw_evidence),
                     )
@@ -136,7 +136,7 @@ impl CertVerifier {
                 verifier.verify_evidence(&evidence, &claims_buffer_hash)?;
                 evidence.get_claims()?
             }
-            VerifiyPolicy::Coco {
+            VerifyPolicy::Coco {
                 verify_mode,
                 policy_ids,
                 trusted_certs_paths,
@@ -241,7 +241,7 @@ impl CertVerifier {
         }
 
         match &self.policy {
-            VerifiyPolicy::Local(claims_check) | VerifiyPolicy::Coco { claims_check, .. } => {
+            VerifyPolicy::Local(claims_check) | VerifyPolicy::Coco { claims_check, .. } => {
                 /* For CoCo, the checking of policy_ids have done in the CocoVerifier, so there is no need to check here. */
                 match claims_check {
                     ClaimsCheck::Contains(expected_claims) => {
@@ -370,7 +370,7 @@ pub mod tests {
             return Ok(());
         }
 
-        /* Test verifiy normal cert */
+        /* Test verify normal cert */
         let mut claims = Claims::new();
         claims.insert("key1".into(), "value1".into());
         claims.insert("key2".into(), "value2".into());
@@ -382,7 +382,7 @@ pub mod tests {
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Local(ClaimsCheck::Contains(claims.clone())))
+            CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims.clone())))
                 .verify_der(&cert)?,
             VerifyPolicyOutput::Passed
         );
@@ -390,7 +390,7 @@ pub mod tests {
         let mut claims_mismatch = claims.clone();
         claims_mismatch.insert("key1".into(), "test-mismatch-value".into());
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Local(ClaimsCheck::Contains(claims_mismatch)))
+            CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims_mismatch)))
                 .verify_der(&cert)?,
             VerifyPolicyOutput::Failed
         );
@@ -398,7 +398,7 @@ pub mod tests {
         let mut claims_missing = claims.clone();
         claims_missing.insert("key3".into(), "test-missing-value".into());
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Local(ClaimsCheck::Contains(claims_missing)))
+            CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims_missing)))
                 .verify_der(&cert)?,
             VerifyPolicyOutput::Failed
         );
@@ -413,7 +413,7 @@ pub mod tests {
             return Ok(());
         }
 
-        /* Test verifiy cert with claims overriding */
+        /* Test verify cert with claims overriding */
         let mut claims = Claims::new();
         claims.insert(
             BUILT_IN_CLAIM_COMMON_TEE_TYPE.into(),
@@ -427,7 +427,7 @@ pub mod tests {
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
-            CertVerifier::new(VerifiyPolicy::Local(ClaimsCheck::Contains(claims.clone())))
+            CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims.clone())))
                 .verify_der(&cert)?,
             VerifyPolicyOutput::Failed
         );

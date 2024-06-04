@@ -88,8 +88,8 @@ int main() {
     rats_rs_claim_t expected_claims[] = {
         /* Replace with your expected claims here */
     };
-    rats_rs_verifiy_policy_t verifiy_policy = {
-        .tag = RATS_RS_VERIFIY_POLICY_LOCAL,
+    rats_rs_verify_policy_t verify_policy = {
+        .tag = RATS_RS_VERIFY_POLICY_LOCAL,
         .LOCAL = {.claims_check = {
                       .tag = RATS_RS_CLAIMS_CHECK_CONTAINS,
                       .CONTAINS = {.claims = expected_claims,
@@ -99,7 +99,7 @@ int main() {
     rats_rs_verify_policy_output_t verify_policy_output =
         RATS_RS_VERIFY_POLICY_OUTPUT_FAILED;
     error_obj = rats_rs_verify_cert(certificate, certificate_len,
-                                    verifiy_policy, &verify_policy_output);
+                                    verify_policy, &verify_policy_output);
 
     if (error_obj == NULL) {
         printf("Verify cert result: %d\n", verify_policy_output);

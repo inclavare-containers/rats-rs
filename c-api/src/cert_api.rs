@@ -1,6 +1,6 @@
 use rats_rs::cert::verify::{
     CertVerifier, ClaimsCheck as RatsRsClaimsCheck, CocoVerifyMode as RatsRsCocoVerifyMode,
-    VerifiyPolicy as RatsRsVerifiyPolicy, VerifyPolicyOutput,
+    VerifyPolicy as RatsRsVerifyPolicy, VerifyPolicyOutput,
 };
 use rats_rs::crypto::{AsymmetricAlgo, AsymmetricPrivateKey, HashAlgo};
 use rats_rs::errors::*;
@@ -223,7 +223,7 @@ pub type coco_verify_mode_t = CocoVerifyMode;
 /// Represents the different verification policies that can be applied to certificates.
 #[derive(Debug, PartialEq)]
 #[repr(C)]
-pub enum VerifiyPolicy {
+pub enum VerifyPolicy {
     /// Verify with Local Attester
     Local { claims_check: claims_check_t },
     /// Verify with CoCo policies. Should be used only when peer is using CoCo Attester
@@ -244,7 +244,7 @@ pub enum VerifiyPolicy {
 }
 
 #[allow(non_camel_case_types)]
-pub type verifiy_policy_t = VerifiyPolicy;
+pub type verify_policy_t = VerifyPolicy;
 
 #[derive(Debug, PartialEq)]
 #[repr(C)]
@@ -282,15 +282,15 @@ pub type custom_verifier_func = extern "C" fn(
     args: *mut c_void,
 ) -> verify_policy_output_t;
 
-impl TryFrom<VerifiyPolicy> for RatsRsVerifiyPolicy {
+impl TryFrom<VerifyPolicy> for RatsRsVerifyPolicy {
     type Error = Error;
 
-    fn try_from(value: VerifiyPolicy) -> Result<Self> {
+    fn try_from(value: VerifyPolicy) -> Result<Self> {
         Ok(match value {
-            VerifiyPolicy::Local { claims_check } => {
-                RatsRsVerifiyPolicy::Local(claims_check.try_into()?)
+            VerifyPolicy::Local { claims_check } => {
+                RatsRsVerifyPolicy::Local(claims_check.try_into()?)
             }
-            VerifiyPolicy::Coco {
+            VerifyPolicy::Coco {
                 verify_mode,
                 policy_ids: policy_ids_ptr,
                 policy_ids_len,
@@ -331,7 +331,7 @@ impl TryFrom<VerifiyPolicy> for RatsRsVerifiyPolicy {
                     Some(trusted_certs_paths)
                 };
 
-                RatsRsVerifiyPolicy::Coco {
+                RatsRsVerifyPolicy::Coco {
                     verify_mode,
                     policy_ids,
                     trusted_certs_paths,
@@ -438,7 +438,7 @@ impl TryFrom<ClaimsCheck> for RatsRsClaimsCheck {
 ///
 /// * `certificate` - A pointer to the PEM-encoded certificate data to be verified.
 /// * `certificate_len` - The size of the certificate data content in bytes.
-/// * `verifiy_policy` - An enum specifying the verification policy. See `verifiy_policy_t` for details.
+/// * `verify_policy` - An enum specifying the verification policy. See `verify_policy_t` for details.
 /// * `verify_policy_output_out` - A mutable pointer where the result of the verification will be stored. See `See `verify_policy_output_t` for details.`
 ///
 /// # Returns
@@ -455,7 +455,7 @@ impl TryFrom<ClaimsCheck> for RatsRsClaimsCheck {
 pub extern "C" fn rats_rs_verify_cert(
     certificate: *const u8,
     certificate_len: usize,
-    verifiy_policy: verifiy_policy_t,
+    verify_policy: verify_policy_t,
     verify_policy_output_out: *mut verify_policy_output_t,
 ) -> *mut error_obj_t {
     if certificate.is_null() || verify_policy_output_out.is_null() {
@@ -466,15 +466,15 @@ pub extern "C" fn rats_rs_verify_cert(
     }
     let cert = unsafe { &*std::ptr::slice_from_raw_parts(certificate, certificate_len) };
 
-    let verifiy_policy = match verifiy_policy
+    let verify_policy = match verify_policy
         .try_into()
-        .context("The verifiy_policy parameter is invalid")
+        .context("The verify_policy parameter is invalid")
     {
         Ok(v) => v,
         Err(e) => return Box::<Error>::into_raw(Box::new(e)),
     };
 
-    let output = match CertVerifier::new(verifiy_policy).verify_pem(cert) {
+    let output = match CertVerifier::new(verify_policy).verify_pem(cert) {
         Ok(v) => v,
         Err(e) => return Box::<Error>::into_raw(Box::new(e)),
     };

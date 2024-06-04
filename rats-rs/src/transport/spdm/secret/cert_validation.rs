@@ -5,7 +5,7 @@ use spdmlib::{
 };
 
 use crate::{
-    cert::verify::{CertVerifier, ClaimsCheck, VerifiyPolicy, VerifyPolicyOutput},
+    cert::verify::{CertVerifier, ClaimsCheck, VerifyPolicy, VerifyPolicyOutput},
     tee::claims::Claims,
 };
 
@@ -28,7 +28,7 @@ impl CertValidationStrategy for RatsCertValidationStrategy {
         let expected_claims = Claims::default(); // TODO: user provided
 
         let verifier =
-            CertVerifier::new(VerifiyPolicy::Local(ClaimsCheck::Contains(expected_claims)));
+            CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(expected_claims)));
         match verifier.verify_der(cert_chain) {
             Ok(VerifyPolicyOutput::Passed) => Ok(()),
             Ok(VerifyPolicyOutput::Failed) => {
