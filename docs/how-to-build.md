@@ -8,7 +8,7 @@
 本项目提供提供了以Docker容器形式的构建开发环境，可以使用如下命令拉取构建开发环境的镜像。
 
 ```sh
-docker pull ghcr.io/inclavare-containers/rats-rs:master
+docker pull ghcr.io/inclavare-containers/rats-rs:builder
 ```
 
 或者也可以直接以Dockerfile的形式构建
@@ -16,7 +16,8 @@ docker pull ghcr.io/inclavare-containers/rats-rs:master
 ```sh
 git clone git@github.com:inclavare-containers/rats-rs.git
 cd rats-rs
-docker build --tag rats-rs:master .
+
+docker build --tag rats-rs:builder --target builder .
 ```
 
 接着根据不同的TEE类型，使用相应命令启动环境
@@ -24,13 +25,13 @@ docker build --tag rats-rs:master .
 - SGX实例：
 
     ```sh
-    docker run -it --privileged --device=/dev/sgx_enclave --device=/dev/sgx_provision rats-rs:master bash
+    docker run -it --privileged --device=/dev/sgx_enclave --device=/dev/sgx_provision rats-rs:builder bash
     ```
 
 - TDX实例：
 
     ```sh
-    docker run -it --privileged --device=/dev/tdx_guest rats-rs:master bash
+    docker run -it --privileged --device=/dev/tdx_guest rats-rs:builder bash
     ```
 
 ### 手动安装依赖

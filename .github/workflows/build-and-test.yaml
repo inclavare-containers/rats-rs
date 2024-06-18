@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build-and-test:
-    container: ghcr.io/inclavare-containers/rats-rs:master
+    container: ghcr.io/inclavare-containers/rats-rs:builder
 
     runs-on: ubuntu-20.04
 

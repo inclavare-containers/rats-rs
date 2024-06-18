@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:20.04 as builder
 
 ENV APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
 ENV DEBIAN_FRONTEND noninteractive
@@ -15,8 +15,6 @@ RUN apt-get update && apt-get install -y make git vim clang-format-9 gcc \
         wget net-tools curl file gnupg tree libcurl4-openssl-dev \
         libbinutils libseccomp-dev libssl-dev binutils-dev libprotoc-dev \
         clang jq
-
-WORKDIR /root
 
 # install rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
@@ -46,11 +44,16 @@ RUN echo "deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu foc
 RUN apt-get update -y && apt-get install -y libsgx-headers="$SGX_SDK_VERSION*" \
         libsgx-uae-service="$SGX_SDK_VERSION*" \
         libsgx-dcap-quote-verify-dev="$SGX_DCAP_VERSION*" \
+        libsgx-dcap-quote-verify="$SGX_DCAP_VERSION*" \
         libsgx-dcap-ql-dev="$SGX_DCAP_VERSION*" \
-        libsgx-dcap-default-qpl-dev="$SGX_DCAP_VERSION*"
+        libsgx-dcap-ql="$SGX_DCAP_VERSION*" \
+        libsgx-dcap-default-qpl-dev="$SGX_DCAP_VERSION*" \
+        libsgx-dcap-default-qpl="$SGX_DCAP_VERSION*"
 
 # install tdx
-RUN apt-get install -y libtdx-attest-dev="$SGX_DCAP_VERSION*"
+RUN apt-get install -y \
+        libtdx-attest-dev="$SGX_DCAP_VERSION*" \
+        libtdx-attest="$SGX_DCAP_VERSION*"
 
 # install occlum
 RUN echo 'deb [arch=amd64] https://occlum.io/occlum-package-repos/debian focal main' | tee /etc/apt/sources.list.d/occlum.list && \
@@ -59,3 +62,12 @@ RUN echo 'deb [arch=amd64] https://occlum.io/occlum-package-repos/debian focal m
     apt-get install -y libfuse2 occlum occlum-toolchains-glibc
 ENV PATH="/opt/occlum/build/bin:${PATH}"
 
+
+FROM builder as builder-c-api
+
+# build source code
+WORKDIR /root/rats-rs
+COPY . .
+
+RUN just prepare-repo && \
+    cmake -Hc-api -Bbuild && make -Cbuild install

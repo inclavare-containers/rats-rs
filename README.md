@@ -35,7 +35,7 @@ rats-rs是一个纯Rust实现的TEE远程证明库，它的最终目标是让开
 1. 首先准备rats-rs的构建环境，建议直接使用我们预构建的Docker容器
 
     ```sh
-    docker run -it --privileged --device=/dev/sgx_enclave --device=/dev/sgx_provision ghcr.io/inclavare-containers/rats-rs:master bash
+    docker run -it --privileged --device=/dev/sgx_enclave --device=/dev/sgx_provision ghcr.io/inclavare-containers/rats-rs:builder bash
     ```
 
 2. Clone代码并编译样例程序
