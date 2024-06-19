@@ -41,12 +41,14 @@ docker build --tag rats-rs:builder --target builder .
 1. 安装基础依赖库
 
     ```sh
-    echo "deb http://cn.archive.ubuntu.com/ubuntu bionic main" >> /etc/apt/sources.list
+    # If you need mirror
+    echo "deb http://cn.archive.ubuntu.com/ubuntu jammy main" >> /etc/apt/sources.list
+
     apt-get update
-    apt-get install -y libprotobuf10 make git vim clang-format-9 gcc \
+    apt-get update && apt-get install -y make git vim clang-format gcc \
         pkg-config protobuf-compiler debhelper cmake \
         wget net-tools curl file gnupg tree libcurl4-openssl-dev \
-        libbinutils libseccomp-dev libssl-dev binutils-dev libprotoc-dev \
+        libbinutils libseccomp-dev libssl-dev binutils-dev libprotoc-dev libprotobuf-dev \
         clang jq
     ```
 
@@ -95,7 +97,7 @@ docker build --tag rats-rs:builder --target builder .
     引入Intel官方提供的在线apt repo
 
     ```sh
-    echo "deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu focal main" | tee /etc/apt/sources.list.d/intel-sgx.list && \
+    echo "deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu jammy main" | tee /etc/apt/sources.list.d/intel-sgx.list && \
     wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key | apt-key add -
     apt-get update -y
     ```
@@ -116,7 +118,7 @@ docker build --tag rats-rs:builder --target builder .
 7. 安装occlum，用于在occlum环境中运行rats-rs样例程序
 
     ```sh
-    echo 'deb [arch=amd64] https://occlum.io/occlum-package-repos/debian focal main' | tee /etc/apt/sources.list.d/occlum.list
+    echo 'deb [arch=amd64] https://occlum.io/occlum-package-repos/debian jammy main' | tee /etc/apt/sources.list.d/occlum.list
     wget -qO - https://occlum.io/occlum-package-repos/debian/public.key | apt-key add -
     apt-get update
     apt-get install -y libfuse2 occlum occlum-toolchains-glibc
