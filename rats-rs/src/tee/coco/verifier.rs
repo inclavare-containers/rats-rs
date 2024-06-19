@@ -13,7 +13,7 @@ use openssl::x509::store::{X509Store, X509StoreBuilder};
 use openssl::x509::{X509StoreContext, X509};
 use serde_json::Value;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::format;
 use std::sync::Mutex;
 
@@ -179,7 +179,7 @@ impl CocoVerifier {
         /* Check the evaluation-reports.
          * The content format of evaluation-reports is documented here: https://github.com/confidential-containers/trustee/blob/43d56f3a4a92a1cc691f63a8e1311bcc0d2b3fc8/attestation-service/docs/example.token.json#L6
          */
-        let policy_ids_to_allows = claims_value
+        let allowed_policy_ids = claims_value
                 .get("evaluation-reports")
                 .map(|o| o.as_array())
                 .flatten()
@@ -198,40 +198,15 @@ impl CocoVerifier {
                                 "The value of `policy-id` should be a string type in evaluation-reports[{i}]: {o}"
                             ))
                         })?;
-
-                    let allow = o.get("evaluation-result")
-                        .ok_or_else(|| {
-                            Error::msg(format!(
-                                "Can not found `evaluation-result` in evaluation-reports[{i}]: {o}"
-                            ))
-                        })?
-                        .get("allow").ok_or_else(|| {
-                            Error::msg(format!(
-                                "Can not found `evaluation-result.allow` in evaluation-reports[{i}]: {o}"
-                            ))
-                        })?.as_bool().ok_or_else(|| {
-                            Error::msg(format!(
-                                "The value of `evaluation-result.allow` should be bool type in evaluation-reports[{i}]: {o}"
-                            ))
-                        })?;
-
-                    Ok((policy_id, allow))
-                }).collect::<Result<HashMap<_,_>>>()?;
+                    Ok(policy_id)
+                }).collect::<Result<HashSet<_>>>()?;
 
         /* We accept the token only when all of the expected policy ids has { "allow": true } */
         for policy_id in &self.policy_ids {
-            match policy_ids_to_allows.get(policy_id.as_str()) {
-                Some(true) => {/* OK */}
-                Some(false) => {
-                    return Err(Error::msg(format!(
-                        "The token is not acceptable due to evaluation failure on policy_id `{policy_id}`"
-                    )))
-                }
-                None => {
-                    return Err(Error::msg(format!(
-                        "The token is not acceptable due to missing evaluation results on policy_id `{policy_id}`"
-                    )))
-                }
+            if !allowed_policy_ids.contains(policy_id.as_str()) {
+                return Err(Error::msg(format!(
+                    "The token is not acceptable due to evaluation failure on policy_id `{policy_id}`"
+                )));
             }
         }
 
