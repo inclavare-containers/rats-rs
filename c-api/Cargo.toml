@@ -12,9 +12,11 @@ zeroize = {workspace = true}
 ctor = "0.2.8"
 env_logger = {workspace = true}
 log = {workspace = true}
+shadow-rs = "=0.20.1"
 
 [build-dependencies]
 cbindgen = "0.24.0"
+shadow-rs = "=0.20.1"
 
 [lib]
 name = "rats_rs"

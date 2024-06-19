@@ -1,4 +1,8 @@
 use ctor::ctor;
+use log::info;
+use shadow_rs::shadow;
+
+shadow!(build);
 
 #[ctor]
 fn init_logger() {
@@ -6,6 +10,13 @@ fn init_logger() {
         .filter_or("RATS_RS_LOG_LEVEL", "debug")
         .write_style_or("RATS_RS_LOG_STYLE", "always"); // enable color
     env_logger::Builder::from_env(env).init();
+
+    info!(
+        "rats-rs c-api library version: v{}  commit: {}  buildtime: {}",
+        build::PKG_VERSION,
+        build::COMMIT_HASH,
+        build::BUILD_TIME
+    );
 }
 
 #[repr(C)]
