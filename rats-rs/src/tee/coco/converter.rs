@@ -13,7 +13,6 @@ use crate::crypto::HashAlgo;
 use crate::errors::*;
 use crate::tee::coco::converter::as_api::AttestationRequest;
 use crate::tee::coco::converter::as_api::AttestationResponse;
-use crate::tee::coco::converter::as_api::Tee as GrpcTee;
 use crate::tee::GenericConverter;
 use crate::tee::GenericEvidence;
 use crate::tee::TeeType;
@@ -50,12 +49,21 @@ impl CocoConverter {
     }
 }
 
-impl From<TeeType> for GrpcTee {
+struct AttestationAgentTeeType(&'static str);
+
+impl AttestationAgentTeeType {
+    pub fn str_id(&self) -> &'static str {
+        self.0
+    }
+}
+
+impl From<TeeType> for AttestationAgentTeeType {
+    // See https://github.com/confidential-containers/trustee/blob/09bef2e2a53d54c2d3107635a65337f409eeaebe/attestation-service/attestation-service/src/bin/grpc/mod.rs#L29-L41
     fn from(value: TeeType) -> Self {
-        match value {
-            TeeType::SgxDcap => GrpcTee::Sgx,
-            TeeType::Tdx => GrpcTee::Tdx,
-        }
+        AttestationAgentTeeType(match value {
+            TeeType::SgxDcap => "sgx",
+            TeeType::Tdx => "tdx",
+        })
     }
 }
 
@@ -76,7 +84,9 @@ impl GenericConverter for CocoConverter {
         };
 
         let request = tonic::Request::new(AttestationRequest {
-            tee: Into::<GrpcTee>::into(in_evidence.get_tee_type()).into(),
+            tee: Into::<AttestationAgentTeeType>::into(in_evidence.get_tee_type())
+                .str_id()
+                .to_owned(),
             evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
             init_data: None, // TODO: add support for init_data when support on AA is ready
             init_data_hash_algorithm: "".into(),
