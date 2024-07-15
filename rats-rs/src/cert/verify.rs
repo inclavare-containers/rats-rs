@@ -34,11 +34,11 @@ pub struct CertVerifier {
 
 #[allow(dead_code)]
 impl CertVerifier {
-    fn new(policy: VerifiyPolicy) -> Self {
+    pub(crate) fn new(policy: VerifiyPolicy) -> Self {
         Self { policy }
     }
 
-    fn verify(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
+    pub(crate) fn verify(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
         let claims = verify_cert_der(cert)?;
 
         let passed = match &self.policy {

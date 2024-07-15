@@ -1,6 +1,9 @@
 #[cfg(feature = "transport-spdm")]
 pub mod spdm;
 
+#[cfg(feature = "transport-tls")]
+pub mod tls;
+
 use crate::errors::*;
 use maybe_async::maybe_async;
 

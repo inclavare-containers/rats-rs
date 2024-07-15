@@ -64,6 +64,40 @@ pub enum ErrorKind {
 
     SpdmlibError,
 
+    OsslUnsupportedPkeyAlgo,
+
+    OsslCtxUninitialize,
+
+    OsslCtxInitializeFail,
+
+    OsslUsePrivKeyfail,
+
+    OsslUseCertfail,
+
+    OsslNoMem,
+
+    OsslSetFdFail,
+
+    OsslServerNegotiationFail,
+
+    OsslGetExtensionFail,
+
+    OsslClientNegotiationFail,
+
+    OsslFindX509ExFail,
+
+    OsslOIDErr,
+
+    OsslClientConnectFail,
+
+    OsslCtxOrSessionUninitialized,
+
+    OsslSendFail,
+
+    OsslReceiveFail,
+
+    OsslInitializeFail,
+
     Unknown,
 }
 
