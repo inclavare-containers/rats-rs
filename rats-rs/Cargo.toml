@@ -38,13 +38,17 @@ itertools = "0.12.1"
 indexmap = {version = "2.2.6", features = ["std", "serde"]}
 tdx-attest-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
 intel-dcap = {path = "../intel-dcap", optional = true}
+openssl-sys = {version = "0.9", optional = true, features = ["bindgen"] }
+libc = {version = "0.2", optional = true}
+lazy_static = "1.5.0"
 
 [features]
 async-tokio = ["dep:tokio"]
 crypto-rustcrypto = ["dep:x509-cert", "dep:sha2", "dep:p256", "dep:rsa", "dep:pkcs8", "dep:const-oid", "dep:signature"]
-default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "verifier-sgx-dcap", "attester-tdx", "verifier-tdx", "is-sync"]
+default = ["crypto-rustcrypto", "transport-spdm", "attester-sgx-dcap-occlum", "verifier-sgx-dcap", "attester-tdx", "verifier-tdx", "is-sync", "transport-tls"]
 is-sync = ["maybe-async/is_sync", "spdmlib/is_sync"]
 transport-spdm = ["dep:spdmlib", "dep:codec", "dep:ring"]
+transport-tls = ["dep:openssl-sys", "dep:libc"]
 attester-sgx-dcap = ["dep:intel-dcap"]
 attester-sgx-dcap-occlum = ["attester-sgx-dcap", "dep:occlum_dcap"]
 attester-sgx-dcap-enclave = [] # TODO: plain enclave mode
