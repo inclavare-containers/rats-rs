@@ -77,12 +77,12 @@ impl AutoEvidence{
         raw_evidence: &[u8],
     ) -> Result<Self> {
         #[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap"))]
-        if let Some(res) = sgx_dcap::evidence::create_evidence_from_dice(cbor_tag, raw_evidence) {
-            return res.map(|res| Self(Box::new(res)));
+        if let Some(Ok(res)) = sgx_dcap::evidence::create_evidence_from_dice(cbor_tag, raw_evidence) {
+            return Ok(Self(Box::new(res)));
         }
         #[cfg(any(feature = "attester-tdx", feature = "verifier-tdx"))]
-        if let Some(res) = tdx::evidence::create_evidence_from_dice(cbor_tag, raw_evidence) {
-            return res.map(|res| Self(Box::new(res)));
+        if let Some(Ok(res)) = tdx::evidence::create_evidence_from_dice(cbor_tag, raw_evidence) {
+            return Ok(Self(Box::new(res)));
         }
         return Err(Error::kind_with_msg(
             ErrorKind::UnrecognizedEvidenceType,
