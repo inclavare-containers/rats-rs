@@ -18,9 +18,9 @@ ExternalProject_Add(
     DOWNLOAD_COMMAND ""
     CONFIGURE_COMMAND ""
     # BUILD_COMMAND echo "Building with cargo now. target dir: <BINARY_DIR>/target" && cargo build --manifest-path ${PROJECT_SOURCE_DIR}/../Cargo.toml --target-dir ./target --package c-api --release
-    # INSTALL_COMMAND cp target/release/librats_rs.so target/release/librats_rs.a ${CMAKE_BINARY_DIR}/Rust/
+    # INSTALL_COMMAND cp target/release/librats_rs.so target/release/librats_rs.a ${CMAKE_BINARY_DIR}/Rust/ && strip ${CMAKE_BINARY_DIR}/Rust/librats_rs.so && strip ${CMAKE_BINARY_DIR}/Rust/librats_rs.a
     BUILD_COMMAND /usr/bin/echo "Building with cargo now. target dir: <BINARY_DIR>/target" && cargo build --no-default-features --manifest-path ${PROJECT_SOURCE_DIR}/../Cargo.toml ${BUILD_COMMAND_FEATURES} --target-dir ./target --package c-api
-    INSTALL_COMMAND cp target/debug/librats_rs.so target/debug/librats_rs.a ${CMAKE_BINARY_DIR}/Rust/
+    INSTALL_COMMAND cp target/debug/librats_rs.so target/debug/librats_rs.a ${CMAKE_BINARY_DIR}/Rust/ && strip ${CMAKE_BINARY_DIR}/Rust/librats_rs.so && strip ${CMAKE_BINARY_DIR}/Rust/librats_rs.a
     BUILD_ALWAYS 1
 )
 
