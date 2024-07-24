@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::{any::Any, path::Path};
 
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -114,15 +114,32 @@ pub enum TeeType {
     Tdx,
 }
 
+pub fn sgx_dcap_detect_env() -> bool {
+    /* We only support occlum now */
+    if cfg!(feature = "attester-sgx-dcap-occlum") && std::env::var("OCCLUM").is_ok() {
+        return true;
+    }
+    return false;
+}
+
+pub fn tdx_detect_env() -> bool {
+    if cfg!(feature = "attester-tdx")
+        && (Path::new("/dev/tdx-attest").exists()
+            || Path::new("/dev/tdx-guest").exists()
+            || Path::new("/dev/tdx_guest").exists())
+    {
+        return true;
+    }
+    return false;
+}
+
 impl TeeType {
     /// Detects the current TEE environment and returns the detected TeeType.
     pub fn detect_env() -> Option<Self> {
-        #[cfg(feature = "attester-sgx-dcap")]
-        if sgx_dcap::detect_env() {
+        if sgx_dcap_detect_env() {
             return Some(Self::SgxDcap);
         }
-        #[cfg(feature = "attester-tdx")]
-        if tdx::detect_env() {
+        if tdx_detect_env() {
             return Some(Self::Tdx);
         }
         return None;
