@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use super::{claims::Claims, sgx_dcap::{self, evidence::SgxDcapEvidence}, tdx::{self, evidence::TdxEvidence}, DiceParseEvidenceOutput, GenericAttester, GenericEvidence, GenericVerifier, TeeType};
+use super::{claims::Claims, DiceParseEvidenceOutput, GenericAttester, GenericEvidence, GenericVerifier, TeeType};
 use crate::errors::*;
 
 
@@ -9,12 +9,20 @@ pub trait LocalEvidence: GenericEvidence {
     fn get_tee_type(&self) -> TeeType;
 }
 
+#[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap"))]
+use super::sgx_dcap::{self, evidence::SgxDcapEvidence};
+
+#[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap"))]
 impl LocalEvidence for SgxDcapEvidence{
     fn get_tee_type(&self) -> TeeType {
         TeeType::SgxDcap
     }
 }
 
+#[cfg(any(feature = "attester-tdx", feature = "verifier-tdx"))]
+use super::tdx::{self, evidence::TdxEvidence};
+
+#[cfg(any(feature = "attester-tdx", feature = "verifier-tdx"))]
 impl LocalEvidence for TdxEvidence{
     fn get_tee_type(&self) -> TeeType {
         TeeType::Tdx
@@ -40,7 +48,9 @@ impl GenericEvidence for AutoEvidence {
     }
 
     fn create_evidence_from_dice(
+        #[allow(unused)]
         cbor_tag: u64,
+        #[allow(unused)]
         raw_evidence: &[u8],
     ) -> DiceParseEvidenceOutput<Self>{
         #[cfg(any(feature = "attester-sgx-dcap", feature = "verifier-sgx-dcap"))]
@@ -77,7 +87,7 @@ impl AutoAttester{
 impl GenericAttester for AutoAttester {
     type Evidence = AutoEvidence;
 
-    fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
+    fn get_evidence(&self, #[allow(unused)]report_data: &[u8]) -> Result<Self::Evidence> {
         let tee_type = TeeType::detect_env();
 
         if let Some(tee_type) = tee_type {
@@ -124,9 +134,11 @@ impl GenericVerifier for AutoVerifier {
     fn verify_evidence(
         &self,
         evidence: &Self::Evidence,
-        report_data: &[u8],
+        #[allow(unused)] report_data: &[u8],
     ) -> Result<()> {
+        #[allow(unused)]
         let tee_type = evidence.0.get_tee_type();
+        #[allow(unused)]
         let evidence = evidence.0.as_ref() as &dyn Any;
         match tee_type {
             #[cfg(feature = "verifier-sgx-dcap")]

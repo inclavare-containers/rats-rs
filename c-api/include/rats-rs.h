@@ -54,6 +54,7 @@ typedef enum rats_rs_ErrorKind {
   RATS_RS_ERROR_KIND_SPDM_SESSION_NOT_READY,
   RATS_RS_ERROR_KIND_SPDM_BROKEN_SESSION,
   RATS_RS_ERROR_KIND_SPDMLIB_ERROR,
+  RATS_RS_ERROR_KIND_UNSUPPORTED_FEATURES,
 } rats_rs_ErrorKind;
 
 typedef enum rats_rs_HashAlgo {

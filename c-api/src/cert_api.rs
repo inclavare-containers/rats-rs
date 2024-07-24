@@ -1,3 +1,4 @@
+use rats_rs::cert::create::CertBuilder;
 use rats_rs::cert::verify::{
     CertVerifier, ClaimsCheck as RatsRsClaimsCheck, CocoVerifyMode as RatsRsCocoVerifyMode,
     VerifyPolicy as RatsRsVerifyPolicy, VerifyPolicyOutput,
@@ -7,10 +8,7 @@ use rats_rs::errors::*;
 use rats_rs::tee::claims::Claims;
 use rats_rs::tee::coco::attester::CocoAttester;
 use rats_rs::tee::coco::converter::CocoConverter;
-use rats_rs::tee::sgx_dcap::attester::SgxDcapAttester;
-use rats_rs::tee::tdx::attester::TdxAttester;
 use rats_rs::tee::AttesterPipeline;
-use rats_rs::{cert::create::CertBuilder, tee::auto::AutoAttester};
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::ffi::{c_char, c_void};
@@ -18,9 +16,7 @@ use std::vec;
 use zeroize::Zeroizing;
 
 use crate::errors::error_obj_t;
-use crate::types::{
-    asymmetric_algo_t, attester_type_t, hash_algo_t, AttesterType, LocalAttesterType,
-};
+use crate::types::{asymmetric_algo_t, attester_type_t, hash_algo_t, AttesterType};
 
 /// Generates RATS X.509 Certificates, as part of the `rats-rs` certificate APIs.
 ///
@@ -148,11 +144,33 @@ fn rats_rs_create_cert_internal(
     }
 
     Ok(match attester_type {
-        AttesterType::Local { r#type } => match r#type {
-            LocalAttesterType::Auto => attester_dispatch!(AutoAttester::new()),
-            LocalAttesterType::SgxDcap => attester_dispatch!(SgxDcapAttester::new()),
-            LocalAttesterType::Tdx => attester_dispatch!(TdxAttester::new()),
-        },
+        #[cfg(feature = "local")]
+        AttesterType::Local { r#type } => {
+            use crate::types::LocalAttesterType;
+
+            match r#type {
+                LocalAttesterType::Auto => {
+                    use rats_rs::tee::auto::AutoAttester;
+                    attester_dispatch!(AutoAttester::new())
+                }
+                LocalAttesterType::SgxDcap => {
+                    use rats_rs::tee::sgx_dcap::attester::SgxDcapAttester;
+                    attester_dispatch!(SgxDcapAttester::new())
+                }
+                LocalAttesterType::Tdx => {
+                    use rats_rs::tee::tdx::attester::TdxAttester;
+                    attester_dispatch!(TdxAttester::new())
+                }
+            }
+        }
+        #[cfg(not(feature = "local"))]
+        AttesterType::Local { r#type: _ } => {
+            return Err(Error::kind_with_msg(
+                ErrorKind::UnsupportedFeatures,
+                "Local attester support is not enabled in rats-rs",
+            ));
+        }
+        #[cfg(feature = "coco")]
         AttesterType::Coco {
             attest_mode,
             aa_addr,
@@ -177,6 +195,17 @@ fn rats_rs_create_cert_internal(
                     attester_dispatch!(attester_pipeline)
                 }
             }
+        }
+        #[cfg(not(feature = "coco"))]
+        AttesterType::Coco {
+            attest_mode,
+            aa_addr,
+            timeout,
+        } => {
+            return Err(Error::kind_with_msg(
+                ErrorKind::UnsupportedFeatures,
+                "Coco attester support is not enabled in rats-rs",
+            ));
         }
     })
 }

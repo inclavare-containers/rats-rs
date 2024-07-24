@@ -21,6 +21,8 @@ TODO...
 
     ```sh
     cmake -Hc-api -Bbuild
+    # 如果要构建只需和CoCo AS/AA对接的rats-rs，避免链接过多TEE的依赖库，则使用
+    # cmake -Hc-api -Bbuild -DCOCO_ONLY=ON
     ```
     这将创建一个build目录用于存放cmake的构建产物
 

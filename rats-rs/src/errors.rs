@@ -76,6 +76,8 @@ pub enum ErrorKind {
     SpdmBrokenSession,
 
     SpdmlibError,
+
+    UnsupportedFeatures,
 }
 
 #[derive(Debug, PartialEq)]

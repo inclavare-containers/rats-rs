@@ -61,7 +61,7 @@ RUN echo 'deb [arch=amd64] https://occlum.io/occlum-package-repos/debian focal m
 ENV PATH="/opt/occlum/build/bin:${PATH}"
 
 
-FROM builder as builder-c-api
+FROM builder as builder-c-api:all
 
 WORKDIR /root/rats-rs
 COPY . .
@@ -69,6 +69,21 @@ COPY . .
 # build headers and librarys
 RUN just prepare-repo && \
     cmake -Hc-api -Bbuild && make -Cbuild install
+
+# build cert-app for testing
+RUN cd ./examples/cert-app/ && \
+    cmake -H. -Bbuild && \
+    make -Cbuild all
+
+
+FROM builder as builder-c-api:coco-only
+
+WORKDIR /root/rats-rs
+COPY . .
+
+# build headers and librarys (with CoCo attester and CoCo verifier only)
+RUN just prepare-repo && \
+    cmake -Hc-api -Bbuild -DCOCO_ONLY=ON && make -Cbuild install
 
 # build cert-app for testing
 RUN cd ./examples/cert-app/ && \

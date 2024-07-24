@@ -1,16 +1,25 @@
 cmake_minimum_required(VERSION 3.15)
 project(rats-rs VERSION 0.1.0)
 
+option(COCO_ONLY "Build rats-rs with CoCo attester and CoCo verifier only"  OFF)
+
 # Build rats-rs c api binary with cargo in release mode
 set_directory_properties(PROPERTIES EP_PREFIX ${CMAKE_BINARY_DIR}/Rust)
 include(ExternalProject)
+
+if (COCO_ONLY)
+    set(BUILD_COMMAND_FEATURES --features coco)
+else()
+    set(BUILD_COMMAND_FEATURES --features local,coco)
+endif()
+
 ExternalProject_Add(
     build_c_api
     DOWNLOAD_COMMAND ""
     CONFIGURE_COMMAND ""
     # BUILD_COMMAND echo "Building with cargo now. target dir: <BINARY_DIR>/target" && cargo build --manifest-path ${PROJECT_SOURCE_DIR}/../Cargo.toml --target-dir ./target --package c-api --release
     # INSTALL_COMMAND cp target/release/librats_rs.so target/release/librats_rs.a ${CMAKE_BINARY_DIR}/Rust/
-    BUILD_COMMAND echo "Building with cargo now. target dir: <BINARY_DIR>/target" && cargo build --manifest-path ${PROJECT_SOURCE_DIR}/../Cargo.toml --target-dir ./target --package c-api
+    BUILD_COMMAND /usr/bin/echo "Building with cargo now. target dir: <BINARY_DIR>/target" && cargo build --no-default-features --manifest-path ${PROJECT_SOURCE_DIR}/../Cargo.toml ${BUILD_COMMAND_FEATURES} --target-dir ./target --package c-api
     INSTALL_COMMAND cp target/debug/librats_rs.so target/debug/librats_rs.a ${CMAKE_BINARY_DIR}/Rust/
     BUILD_ALWAYS 1
 )
