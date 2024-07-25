@@ -1,4 +1,4 @@
-FROM ubuntu:22.04 as builder
+FROM ubuntu:20.04 as builder
 
 ENV APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
 ENV DEBIAN_FRONTEND noninteractive
@@ -31,12 +31,12 @@ RUN wget https://download.01.org/intel-sgx/sgx-linux/$SGX_SDK_VERSION/as.ld.objd
 
 # install SGX SDK
 RUN [ ! -f sgx_linux_x64_sdk_$SGX_SDK_RELEASE_NUMBER.bin ] && \
-    wget https://download.01.org/intel-sgx/sgx-linux/$SGX_SDK_VERSION/distro/ubuntu22.04-server/sgx_linux_x64_sdk_$SGX_SDK_RELEASE_NUMBER.bin && \
+    wget https://download.01.org/intel-sgx/sgx-linux/$SGX_SDK_VERSION/distro/ubuntu20.04-server/sgx_linux_x64_sdk_$SGX_SDK_RELEASE_NUMBER.bin && \
     chmod +x sgx_linux_x64_sdk_$SGX_SDK_RELEASE_NUMBER.bin && echo -e 'no\n/opt/intel\n' | ./sgx_linux_x64_sdk_$SGX_SDK_RELEASE_NUMBER.bin && \
     rm -f sgx_linux_x64_sdk_$SGX_SDK_RELEASE_NUMBER.bin
 
 # add repository to package manager
-RUN echo "deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu jammy main" | tee /etc/apt/sources.list.d/intel-sgx.list && wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key | apt-key add -
+RUN echo "deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu focal main" | tee /etc/apt/sources.list.d/intel-sgx.list && wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key | apt-key add -
 
 # install SGX DCAP
 RUN apt-get update -y && apt-get install -y libsgx-headers="$SGX_SDK_VERSION*" \
@@ -61,7 +61,7 @@ RUN echo 'deb [arch=amd64] https://occlum.io/occlum-package-repos/debian focal m
 ENV PATH="/opt/occlum/build/bin:${PATH}"
 
 
-FROM builder as builder-c-api:all
+FROM builder as builder-c-api-all
 
 WORKDIR /root/rats-rs
 COPY . .
@@ -76,7 +76,7 @@ RUN cd ./examples/cert-app/ && \
     make -Cbuild all
 
 
-FROM builder as builder-c-api:coco-only
+FROM builder as builder-c-api-coco-only
 
 WORKDIR /root/rats-rs
 COPY . .

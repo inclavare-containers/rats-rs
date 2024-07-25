@@ -36,13 +36,13 @@ docker build --tag rats-rs:builder --target builder .
 
 ### 手动安装依赖
 
-下面提供Ubuntu 22.04发行版上的依赖安装流程，在其它发行版上的流程比较类似，可以参考[Intel_SGX_SW_Installation_Guide_for_Linux.pdf](https://download.01.org/intel-sgx/latest/dcap-latest/linux/docs/Intel_SGX_SW_Installation_Guide_for_Linux.pdf)。
+下面提供Ubuntu 20.04发行版上的依赖安装流程，在其它发行版上的流程比较类似，可以参考[Intel_SGX_SW_Installation_Guide_for_Linux.pdf](https://download.01.org/intel-sgx/latest/dcap-latest/linux/docs/Intel_SGX_SW_Installation_Guide_for_Linux.pdf)。
 
 1. 安装基础依赖库
 
     ```sh
     # If you need mirror
-    echo "deb http://cn.archive.ubuntu.com/ubuntu jammy main" >> /etc/apt/sources.list
+    echo "deb http://cn.archive.ubuntu.com/ubuntu focal main" >> /etc/apt/sources.list
 
     apt-get update
     apt-get update && apt-get install -y make git vim clang-format gcc \
@@ -97,7 +97,7 @@ docker build --tag rats-rs:builder --target builder .
     引入Intel官方提供的在线apt repo
 
     ```sh
-    echo "deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu jammy main" | tee /etc/apt/sources.list.d/intel-sgx.list && \
+    echo "deb [arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu focal main" | tee /etc/apt/sources.list.d/intel-sgx.list && \
     wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key | apt-key add -
     apt-get update -y
     ```
@@ -118,7 +118,7 @@ docker build --tag rats-rs:builder --target builder .
 7. 安装occlum，用于在occlum环境中运行rats-rs样例程序
 
     ```sh
-    echo 'deb [arch=amd64] https://occlum.io/occlum-package-repos/debian jammy main' | tee /etc/apt/sources.list.d/occlum.list
+    echo 'deb [arch=amd64] https://occlum.io/occlum-package-repos/debian focal main' | tee /etc/apt/sources.list.d/occlum.list
     wget -qO - https://occlum.io/occlum-package-repos/debian/public.key | apt-key add -
     apt-get update
     apt-get install -y libfuse2 occlum occlum-toolchains-glibc
