@@ -142,10 +142,7 @@ impl CocoVerifier {
                         cert_chain.push(cert)
                     }
                 } else if let Some(x5u) = rsa_jwk.x5u {
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()?;
-                    rt.block_on(download_cert_chain(x5u, &mut cert_chain))?;
+                    download_cert_chain(x5u, &mut cert_chain)?;
                 } else {
                     return Err(Error::msg("Missing certificate in Attestation Token JWK"));
                 }
@@ -256,17 +253,17 @@ fn rs384_verify(payload: &[u8], signature: &[u8], jwk: &RsaJWK) -> Result<()> {
     Ok(())
 }
 
-async fn download_cert_chain(url: String, mut chain: &mut Vec<X509>) -> Result<()> {
-    let res = reqwest::get(url).await?;
+fn download_cert_chain(url: String, mut chain: &mut Vec<X509>) -> Result<()> {
+    let res = reqwest::blocking::get(url)?;
     match res.status() {
         reqwest::StatusCode::OK => {
-            let pem_cert_chain = res.text().await?;
+            let pem_cert_chain = res.text()?;
             parse_pem_cert_chain(pem_cert_chain, &mut chain)?;
         }
         _ => {
             return Err(Error::msg(format!(
                 "Request x5u in Attestation Token JWK Failed, Response: {:?}",
-                res.text().await?,
+                res.text()?,
             )));
         }
     }
