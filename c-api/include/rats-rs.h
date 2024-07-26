@@ -115,9 +115,13 @@ typedef enum rats_rs_CocoAttestMode_Tag {
 
 typedef struct rats_rs_CocoAttestMode_rats_rs_Token_Body {
   /**
-   * The Grpc address of CoCo Attestation Service
+   * The address of CoCo Attestation Service
    */
   const char *as_addr;
+  /**
+   * If true, connect to Attestation Service via Grpc protocol. If false, connect via HTTP protocol.
+   */
+  bool as_is_grpc;
   /**
    * The policy ids needed to check
    */
@@ -262,9 +266,13 @@ typedef enum rats_rs_CocoVerifyMode_Tag {
 
 typedef struct rats_rs_CocoVerifyMode_rats_rs_Evidence_Body {
   /**
-   * The Grpc address of CoCo Attestation Service
+   * The address of CoCo Attestation Service
    */
   const char *as_addr;
+  /**
+   * If true, connect to Attestation Service via Grpc protocol. If false, connect via HTTP protocol.
+   */
+  bool as_is_grpc;
 } rats_rs_CocoVerifyMode_rats_rs_Evidence_Body;
 
 typedef struct rats_rs_CocoVerifyMode {

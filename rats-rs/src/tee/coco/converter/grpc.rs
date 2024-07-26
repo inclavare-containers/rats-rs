@@ -8,11 +8,13 @@ use tokio::runtime::Runtime;
 
 use self::as_api::attestation_request::RuntimeData;
 use self::as_api::attestation_service_client::AttestationServiceClient;
-use super::evidence::{CocoAsToken, CocoEvidence};
+use self::as_api::AttestationRequest;
+use self::as_api::AttestationResponse;
+use super::super::evidence::{CocoAsToken, CocoEvidence};
+use super::AttestationAgentTeeType;
+use super::AttestationServiceHashAlgo;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
-use crate::tee::coco::converter::as_api::AttestationRequest;
-use crate::tee::coco::converter::as_api::AttestationResponse;
 use crate::tee::GenericConverter;
 use crate::tee::GenericEvidence;
 use crate::tee::TeeType;
@@ -21,13 +23,13 @@ pub mod as_api {
     tonic::include_proto!("attestation");
 }
 
-pub struct CocoConverter {
+pub struct CocoGrpcConverter {
     tokio_rt: Runtime,
     client: Mutex<AttestationServiceClient<tonic::transport::Channel>>,
     policy_ids: Vec<String>,
 }
 
-impl CocoConverter {
+impl CocoGrpcConverter {
     pub fn new(as_addr: &str, policy_ids: &Vec<String>) -> Result<Self> {
         let tokio_rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -36,9 +38,7 @@ impl CocoConverter {
         let client = Mutex::new(
             tokio_rt
                 .block_on(AttestationServiceClient::connect(as_addr.to_string()))
-                .with_context(|| {
-                    format!("Failed to connect attestation-service grpc address `{as_addr}`",)
-                })?,
+                .with_context(|| format!("Failed to connect grpc-as address `{as_addr}`",))?,
         );
 
         Ok(Self {
@@ -49,39 +49,18 @@ impl CocoConverter {
     }
 }
 
-struct AttestationAgentTeeType(&'static str);
-
-impl AttestationAgentTeeType {
-    pub fn str_id(&self) -> &'static str {
-        self.0
-    }
-}
-
-impl From<TeeType> for AttestationAgentTeeType {
-    // See https://github.com/confidential-containers/trustee/blob/09bef2e2a53d54c2d3107635a65337f409eeaebe/attestation-service/attestation-service/src/bin/grpc/mod.rs#L29-L41
-    fn from(value: TeeType) -> Self {
-        AttestationAgentTeeType(match value {
-            TeeType::SgxDcap => "sgx",
-            TeeType::Tdx => "tdx",
-        })
-    }
-}
-
-impl GenericConverter for CocoConverter {
+impl GenericConverter for CocoGrpcConverter {
     type InEvidence = CocoEvidence;
     type OutEvidence = CocoAsToken;
 
     fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence> {
         debug!(
-            "Convert CoCo evidence to CoCo AS token with policy ids: {:?}",
+            "Convert CoCo evidence to CoCo AS token via grpc-as with policy ids: {:?}",
             self.policy_ids
         );
 
-        let runtime_data_hash_algorithm = match in_evidence.get_aa_runtime_data_hash_algo() {
-            HashAlgo::Sha256 => "sha256",
-            HashAlgo::Sha384 => "sha384",
-            HashAlgo::Sha512 => "sha512",
-        };
+        let runtime_data_hash_algorithm =
+            AttestationServiceHashAlgo::from(in_evidence.get_aa_runtime_data_hash_algo()).str_id();
 
         let request = tonic::Request::new(AttestationRequest {
             tee: Into::<AttestationAgentTeeType>::into(in_evidence.get_tee_type())
@@ -101,7 +80,7 @@ impl GenericConverter for CocoConverter {
         let response: AttestationResponse = self
             .tokio_rt
             .block_on(client.attestation_evaluate(request))
-            .context("Call attestation_evaluate() on AS via grpc failed")?
+            .context("Call attestation_evaluate() on grpc-as failed")?
             .into_inner();
 
         let attestation_token = response.attestation_token;

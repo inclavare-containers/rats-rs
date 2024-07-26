@@ -1,7 +1,6 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <errno.h>
 #include <string.h>
 #include <getopt.h>
 #include <stdint.h>
@@ -118,7 +117,7 @@ int main(int argc, char **argv) {
 			     "    Options:\n\n"
 			     "        --no-privkey/-k               Set to enable key pairs generation in rats-rs\n"
 			     "        --add-claim/-C key:val        Add a user-defined custom claims\n"
-			     "        --attester/-a value           Set the type of quote attester. (Should be one of: coco, auto, sgx-ecdsa, tdx)\n"
+			     "        --attester/-a value           Set the type of quote attester. (Should be one of: coco, auto, sgx-ecdsa, tdx. Default: auto)\n"
 			     "        --log-level/-l                Set the log level. (Should be one of: off, error, warn, info, debug, trace. Default: error)\n"
 			     "        --help/-h                     Show the usage\n"
             );

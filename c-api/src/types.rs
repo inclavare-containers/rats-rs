@@ -27,8 +27,10 @@ pub enum CocoAttestMode {
     Evidence,
     /// Get CoCo evidence from attestation-agent, and then convert it to CoCo attestation token.
     Token {
-        /// The Grpc address of CoCo Attestation Service
+        /// The address of CoCo Attestation Service
         as_addr: *const c_char,
+        /// If true, connect to Attestation Service via Grpc protocol. If false, connect via HTTP protocol.
+        as_is_grpc: bool,
         /// The policy ids needed to check
         policy_ids: *const *const c_char,
         /// The length of policy_ids array

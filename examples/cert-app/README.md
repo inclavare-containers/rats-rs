@@ -41,7 +41,7 @@ The options of `cert-app` are as followed:
 
         --no-privkey/-k               Set to enable key pairs generation in rats-rs
         --add-claim/-C key:val        Add a user-defined custom claims
-        --attester/-a value           Set the type of quote attester. (Should be one of: auto, sgx-ecdsa, tdx)
+        --attester/-a value           Set the type of quote attester. (Should be one of: coco, auto, sgx-ecdsa, tdx. Default: auto)
         --log-level/-l                Set the log level. (Should be one of: off, error, warn, info, debug, trace. Default: error)
         --help/-h                     Show the usage
 ```

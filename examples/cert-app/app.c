@@ -152,8 +152,8 @@ int app_verify_cert(uint8_t *certificate, size_t certificate_len,
             .tag = RATS_RS_VERIFY_POLICY_COCO,
             .COCO = {
                 .verify_mode = {.tag = RATS_RS_COCO_VERIFY_MODE_EVIDENCE,
-                                .EVIDENCE = {.as_addr =
-                                                 "http://127.0.0.1:50004"}},
+                                .EVIDENCE = {.as_addr = "http://127.0.0.1:8080",
+                                             .as_is_grpc = false}},
                 .policy_ids = policy_ids,
                 .policy_ids_len = sizeof(policy_ids) / sizeof(policy_ids[0]),
                 .trusted_certs_paths = NULL,
