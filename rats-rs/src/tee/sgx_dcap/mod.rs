@@ -5,6 +5,13 @@ pub mod evidence;
 #[cfg(feature = "verifier-sgx-dcap")]
 pub mod verifier;
 
+pub fn detect_env() -> bool {
+    /* We only support occlum now */
+    if cfg!(feature = "attester-sgx-dcap-occlum") && std::env::var("OCCLUM").is_ok() {
+        return true;
+    }
+    return false;
+}
 
 #[cfg(test)]
 pub mod tests {

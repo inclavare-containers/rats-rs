@@ -1,9 +1,22 @@
+use std::path::Path;
+
 #[cfg(feature = "attester-tdx")]
 pub mod attester;
 pub mod claims;
 pub mod evidence;
 #[cfg(feature = "verifier-tdx")]
 pub mod verifier;
+
+pub fn detect_env() -> bool {
+    if cfg!(feature = "attester-tdx")
+        && (Path::new("/dev/tdx-attest").exists()
+            || Path::new("/dev/tdx-guest").exists()
+            || Path::new("/dev/tdx_guest").exists())
+    {
+        return true;
+    }
+    return false;
+}
 
 #[cfg(test)]
 pub mod tests {
