@@ -5,10 +5,15 @@ use self::extensions::{DiceEndorsementExtension, DiceEvidenceExtension};
 use crate::crypto::{AsymmetricPrivateKey, HashAlgo};
 use crate::errors::*;
 
+use pkcs8::der::referenced::OwnedToRef;
 use std::str::FromStr;
 use std::time::Duration;
 use x509_cert::builder::Builder;
 use x509_cert::builder::{CertificateBuilder, Profile};
+use x509_cert::ext::pkix::BasicConstraints;
+use x509_cert::ext::pkix::KeyUsage;
+use x509_cert::ext::pkix::KeyUsages;
+use x509_cert::ext::pkix::SubjectKeyIdentifier;
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
@@ -26,7 +31,7 @@ pub(crate) fn generate_and_sign_dice_cert(
     let validity = Validity::from_now(Duration::new(60, 0))
         .kind(ErrorKind::GenCertError)
         .context("bad validity value")?;
-    let profile = Profile::Root;
+    let profile = Profile::Manual { issuer: None };
     let subject = Name::from_str(subject)
         .kind(ErrorKind::GenCertError)
         .with_context(|| format!("bad subject value `{}`", subject))?;
@@ -54,11 +59,31 @@ pub(crate) fn generate_and_sign_dice_cert(
                 serial_number,
                 validity,
                 subject,
-                pub_key_info,
+                pub_key_info.clone(),
                 &signer,
             )
             .kind(ErrorKind::GenCertError)
             .context("failed to create certificate builder")?;
+
+            builder
+                .add_extension(&(SubjectKeyIdentifier::try_from(pub_key_info.owned_to_ref())?))
+                .kind(ErrorKind::GenCertError)
+                .context("failed to add evidence extension")?;
+
+            builder
+                .add_extension(&BasicConstraints {
+                    ca: true,
+                    path_len_constraint: None,
+                })
+                .kind(ErrorKind::GenCertError)
+                .context("failed to add evidence extension")?;
+
+            builder
+                .add_extension(&KeyUsage(
+                    KeyUsages::KeyCertSign | KeyUsages::CRLSign | KeyUsages::DigitalSignature,
+                ))
+                .kind(ErrorKind::GenCertError)
+                .context("failed to add evidence extension")?;
 
             builder
                 .add_extension(&DiceEvidenceExtension(evidence_buffer))

@@ -31,7 +31,7 @@ spdmlib = {workspace = true, optional = true}
 spin = {workspace = true}
 thiserror = "1.0.56"
 tokio = {version = "1.36.0", features = ["full"], optional = true}
-x509-cert = {version = "0.2.5", features = ["builder"], optional = true}
+x509-cert = {version = "0.2.5", features = ["builder", "hazmat"], optional = true}
 zeroize = "1.7.0"
 bstr = "1.9.1"
 itertools = "0.12.1"
