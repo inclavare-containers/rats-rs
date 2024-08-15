@@ -37,9 +37,9 @@ impl AttestationAgentServiceClient {
         Ok(cres)
     }
 
-    pub fn get_token(&self, ctx: ttrpc::context::Context, req: &super::attestation_agent::GetTokenRequest) -> ::ttrpc::Result<super::attestation_agent::GetTokenResponse> {
-        let mut cres = super::attestation_agent::GetTokenResponse::new();
-        ::ttrpc::client_request!(self, ctx, req, "attestation_agent.AttestationAgentService", "GetToken", cres);
+    pub fn get_tee_type(&self, ctx: ttrpc::context::Context, req: &super::attestation_agent::GetTeeTypeRequest) -> ::ttrpc::Result<super::attestation_agent::GetTeeTypeResponse> {
+        let mut cres = super::attestation_agent::GetTeeTypeResponse::new();
+        ::ttrpc::client_request!(self, ctx, req, "attestation_agent.AttestationAgentService", "GetTeeType", cres);
         Ok(cres)
     }
 }
@@ -55,13 +55,13 @@ impl ::ttrpc::MethodHandler for GetEvidenceMethod {
     }
 }
 
-struct GetTokenMethod {
+struct GetTeeTypeMethod {
     service: Arc<Box<dyn AttestationAgentService + Send + Sync>>,
 }
 
-impl ::ttrpc::MethodHandler for GetTokenMethod {
+impl ::ttrpc::MethodHandler for GetTeeTypeMethod {
     fn handler(&self, ctx: ::ttrpc::TtrpcContext, req: ::ttrpc::Request) -> ::ttrpc::Result<()> {
-        ::ttrpc::request_handler!(self, ctx, req, attestation_agent, GetTokenRequest, get_token);
+        ::ttrpc::request_handler!(self, ctx, req, attestation_agent, GetTeeTypeRequest, get_tee_type);
         Ok(())
     }
 }
@@ -70,8 +70,8 @@ pub trait AttestationAgentService {
     fn get_evidence(&self, _ctx: &::ttrpc::TtrpcContext, _: super::attestation_agent::GetEvidenceRequest) -> ::ttrpc::Result<super::attestation_agent::GetEvidenceResponse> {
         Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/GetEvidence is not supported".to_string())))
     }
-    fn get_token(&self, _ctx: &::ttrpc::TtrpcContext, _: super::attestation_agent::GetTokenRequest) -> ::ttrpc::Result<super::attestation_agent::GetTokenResponse> {
-        Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/GetToken is not supported".to_string())))
+    fn get_tee_type(&self, _ctx: &::ttrpc::TtrpcContext, _: super::attestation_agent::GetTeeTypeRequest) -> ::ttrpc::Result<super::attestation_agent::GetTeeTypeResponse> {
+        Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/GetTeeType is not supported".to_string())))
     }
 }
 
@@ -81,8 +81,8 @@ pub fn create_attestation_agent_service(service: Arc<Box<dyn AttestationAgentSer
     methods.insert("/attestation_agent.AttestationAgentService/GetEvidence".to_string(),
                     Box::new(GetEvidenceMethod{service: service.clone()}) as Box<dyn ::ttrpc::MethodHandler + Send + Sync>);
 
-    methods.insert("/attestation_agent.AttestationAgentService/GetToken".to_string(),
-                    Box::new(GetTokenMethod{service: service.clone()}) as Box<dyn ::ttrpc::MethodHandler + Send + Sync>);
+    methods.insert("/attestation_agent.AttestationAgentService/GetTeeType".to_string(),
+                    Box::new(GetTeeTypeMethod{service: service.clone()}) as Box<dyn ::ttrpc::MethodHandler + Send + Sync>);
 
     methods
 }

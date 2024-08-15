@@ -1,7 +1,7 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 
-use super::ttrpc_protocol::attestation_agent::GetEvidenceRequest;
+use super::ttrpc_protocol::attestation_agent::{GetEvidenceRequest, GetTeeTypeRequest};
 use super::TTRPC_DEFAULT_TIMEOUT;
 use super::{
     evidence::CocoEvidence, ttrpc_protocol::attestation_agent_ttrpc::AttestationAgentServiceClient,
@@ -43,25 +43,40 @@ impl GenericAttester for CocoAttester {
         let aa_runtime_data_hash_value =
             DefaultCrypto::hash(aa_runtime_data_hash_algo, aa_runtime_data.as_bytes());
 
-        let req = GetEvidenceRequest {
+        // Get evidence from AA
+        let get_evidence_req = GetEvidenceRequest {
             RuntimeData: aa_runtime_data_hash_value,
             ..Default::default()
         };
-        let res = self
+        let get_evidence_res = self
             .client
-            .get_evidence(ttrpc::context::with_timeout(self.timeout), &req)
+            .get_evidence(
+                ttrpc::context::with_timeout(self.timeout),
+                &get_evidence_req,
+            )
             .kind(ErrorKind::CocoRequestAAFailed)?;
 
-        // This is a workaround, since rats-rs attester is running in the same TEE instance as AA.
-        // TODO: get tee type from AA
-        let tee_type = TeeType::detect_env().ok_or(Error::kind_with_msg(
-            ErrorKind::UnsupportedTeeType,
-            format!("Cannot detect the tee type of environment"),
-        ))?;
+        // Query tee type from AA
+        let get_tee_type_req = GetTeeTypeRequest {
+            ..Default::default()
+        };
+        let get_tee_type_res = self
+            .client
+            .get_tee_type(
+                ttrpc::context::with_timeout(self.timeout),
+                &get_tee_type_req,
+            )
+            .kind(ErrorKind::CocoRequestAAFailed)?;
+        let tee_type = TeeType::from_id_str(&get_tee_type_res.tee).with_context(|| {
+            format!(
+                "Got unrecognized tee type `{}` from attestation-agent",
+                &get_tee_type_res.tee
+            )
+        })?;
 
         Ok(CocoEvidence::new(
             tee_type,
-            res.Evidence,
+            get_evidence_res.Evidence,
             aa_runtime_data,
             aa_runtime_data_hash_algo,
         )?)
