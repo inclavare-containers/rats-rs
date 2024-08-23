@@ -23,7 +23,8 @@ pub(crate) fn generate_and_sign_dice_cert(
     endorsements_buffer: Option<&[u8]>,
 ) -> Result<Certificate> {
     let serial_number = SerialNumber::from(42u32);
-    let validity = Validity::from_now(Duration::new(60, 0))
+    // TODO: use per-connection freshness instead of longer duration, currently is 6 hours
+    let validity = Validity::from_now(Duration::new(6 * 60 * 60, 0))
         .kind(ErrorKind::GenCertError)
         .context("bad validity value")?;
     let subject = Name::from_str(subject)
