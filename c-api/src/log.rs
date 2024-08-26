@@ -1,5 +1,5 @@
 use ctor::ctor;
-use log::info;
+use log::{debug, info};
 use shadow_rs::shadow;
 
 shadow!(build);
@@ -35,12 +35,21 @@ pub type log_level_t = LogLevel;
 /// Set log level of all log print in rats-rs, all of the supported levels can be found in `log_level_t`.
 #[no_mangle]
 pub extern "C" fn rats_rs_set_log_level(log_level: log_level_t) {
-    log::set_max_level(match log_level {
-        LogLevel::Off => log::LevelFilter::Off,
-        LogLevel::Error => log::LevelFilter::Error,
-        LogLevel::Warn => log::LevelFilter::Warn,
-        LogLevel::Info => log::LevelFilter::Info,
-        LogLevel::Debug => log::LevelFilter::Debug,
-        LogLevel::Trace => log::LevelFilter::Trace,
-    })
+    match std::env::var("RATS_RS_LOG_LEVEL") {
+        Ok(v) if v != "" => {
+            debug!(
+                "The environment variable RATS_RS_LOG_LEVEL was set to value `{v}`, so rats_rs_set_log_level() will have no effect",
+            );
+        }
+        _ => {
+            log::set_max_level(match log_level {
+                LogLevel::Off => log::LevelFilter::Off,
+                LogLevel::Error => log::LevelFilter::Error,
+                LogLevel::Warn => log::LevelFilter::Warn,
+                LogLevel::Info => log::LevelFilter::Info,
+                LogLevel::Debug => log::LevelFilter::Debug,
+                LogLevel::Trace => log::LevelFilter::Trace,
+            });
+        }
+    }
 }
