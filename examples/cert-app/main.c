@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
                         .attest_mode = {.tag =
                                             RATS_RS_COCO_ATTEST_MODE_EVIDENCE},
                         .aa_addr = "unix:///tmp/attestation.sock",
-                        .timeout = 0}};
+                        .timeout_nano = 0}};
             else if (!strcasecmp(optarg, "auto"))
                 attester_type = (rats_rs_attester_type_t){
                     .tag = RATS_RS_ATTESTER_TYPE_LOCAL,

@@ -174,13 +174,13 @@ fn rats_rs_create_cert_internal(
         AttesterType::Coco {
             attest_mode,
             aa_addr,
-            timeout,
+            timeout_nano,
         } => {
             let aa_addr = unsafe { CStr::from_ptr(aa_addr) }
                 .to_str()
                 .kind(ErrorKind::InvalidParameter)
                 .context("Invalid aa_addr")?;
-            let coco_attester = CocoAttester::new_with_timeout(aa_addr, timeout)?;
+            let coco_attester = CocoAttester::new_with_timeout_nano(aa_addr, timeout_nano)?;
             match attest_mode {
                 crate::types::CocoAttestMode::Evidence => attester_dispatch!(coco_attester),
                 crate::types::CocoAttestMode::Token {

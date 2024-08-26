@@ -54,7 +54,7 @@ pub enum AttesterType {
         /// The ttrpc unix domain socket address of attestation-agent to connect to.
         aa_addr: *const c_char,
         /// Timeout for ttrpc call to AA, should be nano seconds. Wait indefinitely when set to 0.  
-        timeout: i64,
+        timeout_nano: i64,
     },
 }
 

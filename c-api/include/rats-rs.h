@@ -165,7 +165,7 @@ typedef struct rats_rs_AttesterType_rats_rs_Coco_Body {
   /**
    * Timeout for ttrpc call to AA, should be nano seconds. Wait indefinitely when set to 0.
    */
-  int64_t timeout;
+  int64_t timeout_nano;
 } rats_rs_AttesterType_rats_rs_Coco_Body;
 
 typedef struct rats_rs_AttesterType {

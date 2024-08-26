@@ -2,7 +2,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 
 use super::ttrpc_protocol::attestation_agent::{GetEvidenceRequest, GetTeeTypeRequest};
-use super::TTRPC_DEFAULT_TIMEOUT;
+use super::TTRPC_DEFAULT_TIMEOUT_NANO;
 use super::{
     evidence::CocoEvidence, ttrpc_protocol::attestation_agent_ttrpc::AttestationAgentServiceClient,
 };
@@ -12,15 +12,15 @@ use crate::tee::{GenericAttester, GenericEvidence, TeeType};
 
 pub struct CocoAttester {
     client: AttestationAgentServiceClient,
-    timeout: i64,
+    timeout_nano: i64,
 }
 
 impl CocoAttester {
     pub fn new(aa_addr: &str) -> Result<Self> {
-        Self::new_with_timeout(aa_addr, TTRPC_DEFAULT_TIMEOUT)
+        Self::new_with_timeout_nano(aa_addr, TTRPC_DEFAULT_TIMEOUT_NANO)
     }
 
-    pub fn new_with_timeout(aa_addr: &str, timeout: i64) -> Result<Self> {
+    pub fn new_with_timeout_nano(aa_addr: &str, timeout_nano: i64) -> Result<Self> {
         let inner = ttrpc::Client::connect(aa_addr)
             .kind(ErrorKind::CocoConnectTtrpcFailed)
             .context(format!(
@@ -28,7 +28,10 @@ impl CocoAttester {
                 aa_addr
             ))?;
         let client = AttestationAgentServiceClient::new(inner);
-        Ok(Self { client, timeout })
+        Ok(Self {
+            client,
+            timeout_nano,
+        })
     }
 }
 
@@ -51,7 +54,7 @@ impl GenericAttester for CocoAttester {
         let get_evidence_res = self
             .client
             .get_evidence(
-                ttrpc::context::with_timeout(self.timeout),
+                ttrpc::context::with_timeout(self.timeout_nano),
                 &get_evidence_req,
             )
             .kind(ErrorKind::CocoRequestAAFailed)?;
@@ -63,7 +66,7 @@ impl GenericAttester for CocoAttester {
         let get_tee_type_res = self
             .client
             .get_tee_type(
-                ttrpc::context::with_timeout(self.timeout),
+                ttrpc::context::with_timeout(self.timeout_nano),
                 &get_tee_type_req,
             )
             .kind(ErrorKind::CocoRequestAAFailed)?;
