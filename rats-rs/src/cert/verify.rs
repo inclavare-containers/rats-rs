@@ -159,6 +159,7 @@ impl CertVerifier {
                                 cbor_tag, &raw_evidence[..10],raw_evidence.len()
                             )
                         })?;
+                        debug!("Creating CocoConverter now. as_addr: {as_addr}, policy_ids: {policy_ids:?}, as_is_grpc: {}", *as_is_grpc );
                         let converter = CocoConverter::new(&as_addr, &policy_ids, *as_is_grpc)?;
                         converter.convert(&evidence)?
                     }
