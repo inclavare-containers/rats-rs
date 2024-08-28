@@ -3,7 +3,7 @@ use crate::{errors::*, tee::GenericVerifier};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use log::{debug, error, trace};
+use log::{debug, error, trace, warn};
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
@@ -55,8 +55,11 @@ impl CocoVerifier {
     }
 
     fn verify_evidence_internal(&self, evidence: &CocoAsToken, report_data: &[u8]) -> Result<()> {
-        debug!("Verify token with policy ids: {:?}", self.policy_ids);
         let token = evidence.as_str();
+        debug!(
+            "Verify CoCo AS token \"{token}\" with policy ids: {:?}",
+            self.policy_ids
+        );
         let split_token: Vec<&str> = token.split('.').collect();
         if !split_token.len() == 3 {
             return Err(Error::msg("Illegal JWT format"));
@@ -93,11 +96,22 @@ impl CocoVerifier {
             return Err(Error::msg("token expiration unset"));
         };
         if exp < now {
-            return Err(Error::msg("token expired"));
+            return Err(Error::msg(format!(
+                "token expired, current timestamp: {now} exp: {exp}"
+            )));
         }
         if let Some(nbf) = claims_value["nbf"].as_i64() {
-            if nbf > now {
-                return Err(Error::msg("before validity"));
+            if now < nbf {
+                if now + 5 >= nbf {
+                    warn!(
+                        "The token is {}s (<5s) before validity, but is tolerated",
+                        nbf - now
+                    );
+                } else {
+                    return Err(Error::msg(format!(
+                        "token is before validity, current timestamp: {now} nbf: {nbf}"
+                    )));
+                }
             }
         }
 
@@ -216,6 +230,7 @@ impl GenericVerifier for CocoVerifier {
 
     fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()> {
         self.verify_evidence_internal(evidence, report_data)
+            .context("Failed to verify CoCo AS token")
             .map_err(|e| {
                 if e.get_kind() == ErrorKind::Unknown {
                     e.with_kind(ErrorKind::CocoVerifyTokenFailed)
