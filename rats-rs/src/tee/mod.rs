@@ -110,8 +110,12 @@ impl<A: GenericAttester, C: GenericConverter<InEvidence = A::Evidence>> GenericA
 /// Enum representing different types of TEEs.
 #[derive(Debug, PartialEq, EnumIter, Clone, Copy)]
 pub enum TeeType {
+    // This only used for testing with CoCo
+    Sample,
     SgxDcap,
     Tdx,
+    // China Secure Virtualization
+    Csv,
 }
 
 impl TeeType {
@@ -130,8 +134,10 @@ impl TeeType {
 
     pub fn id_str(&self) -> &'static str {
         match self {
+            TeeType::Sample => "sample",
             TeeType::SgxDcap => "sgx-dcap",
             TeeType::Tdx => "tdx",
+            TeeType::Csv => "csv",
         }
     }
 
