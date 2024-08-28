@@ -23,8 +23,10 @@ impl From<TeeType> for AttestationAgentTeeType {
     // See https://github.com/confidential-containers/trustee/blob/09bef2e2a53d54c2d3107635a65337f409eeaebe/attestation-service/attestation-service/src/bin/grpc/mod.rs#L29-L41
     fn from(value: TeeType) -> Self {
         AttestationAgentTeeType(match value {
+            TeeType::Sample => "sample",
             TeeType::SgxDcap => "sgx",
             TeeType::Tdx => "tdx",
+            TeeType::Csv => "csv",
         })
     }
 }
