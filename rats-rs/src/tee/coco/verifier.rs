@@ -4,14 +4,11 @@ use crate::{errors::*, tee::GenericVerifier};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use log::{debug, error, trace, warn};
-use openssl::hash::MessageDigest;
-use openssl::pkey::PKey;
-use openssl::rsa::Rsa;
-use openssl::sign::Verifier;
-use openssl::stack::Stack;
-use openssl::x509::store::{X509Store, X509StoreBuilder};
-use openssl::x509::{X509StoreContext, X509};
+use pkcs8::der::{Decode, DecodePem, Encode};
+use pkcs8::EncodePublicKey;
 use serde_json::Value;
+use signature::Verifier;
+use webpki::{EndEntityCert, TlsServerTrustAnchors, TrustAnchor};
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::format;
@@ -20,11 +17,26 @@ use std::sync::Mutex;
 // TODO: rewrite with RustCrypto and jwt crate
 
 pub struct CocoVerifier {
-    /// The trusted certs list used for validating JWT
-    trusted_certs: Option<X509Store>,
+    /// The trusted certs list used for validating JWT. Each of the certs are encoded in DER binary.
+    trusted_certs: Option<Vec<Vec<u8>>>,
     /// The policy ids need to check
     policy_ids: Vec<String>,
 }
+
+static SUPPORTED_SIG_ALGS: &'static [&'static webpki::SignatureAlgorithm] = &[
+    &webpki::ECDSA_P256_SHA256,
+    &webpki::ECDSA_P256_SHA384,
+    &webpki::ECDSA_P384_SHA256,
+    &webpki::ECDSA_P384_SHA384,
+    &webpki::ED25519,
+    &webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+    &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+    &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+    &webpki::RSA_PKCS1_2048_8192_SHA256,
+    &webpki::RSA_PKCS1_2048_8192_SHA384,
+    &webpki::RSA_PKCS1_2048_8192_SHA512,
+    &webpki::RSA_PKCS1_3072_8192_SHA384,
+];
 
 impl CocoVerifier {
     pub fn new(
@@ -33,17 +45,17 @@ impl CocoVerifier {
     ) -> Result<Self> {
         let trusted_certs = match trusted_certs_paths {
             Some(paths) => {
-                let mut store_builder = X509StoreBuilder::new()?;
+                let mut trusted_certs = vec![];
                 for path in paths {
                     let trust_cert_pem = std::fs::read(path)
                         .kind(ErrorKind::InvalidParameter)
                         .with_context(|| {
                             format!("Load trusted certificate from `{}` failed", path)
                         })?;
-                    let trust_cert = X509::from_pem(&trust_cert_pem)?;
-                    store_builder.add_cert(trust_cert.to_owned())?;
+                    let der = x509_cert::Certificate::from_pem(trust_cert_pem)?.to_der()?;
+                    trusted_certs.push(der);
                 }
-                Some(store_builder.build())
+                Some(trusted_certs)
             }
             None => None,
         };
@@ -130,7 +142,7 @@ impl CocoVerifier {
                 if rsa_jwk.alg != *"RS384" {
                     return Err(Error::msg("Unmatched RSA JWK alg"));
                 }
-                rs384_verify(&payload, &signature, &rsa_jwk)?;
+                rs384_verify(&payload, &signature, &rsa_jwk).context("RS384 verify failed")?;
             }
             None => {
                 return Err(Error::msg("Miss `alg` in JWT header"));
@@ -145,41 +157,60 @@ impl CocoVerifier {
             None => {
                 log::warn!("No trusted certificate provided, skip verification of JWK cert of Attestation Token");
             }
-            Some(trusted_store) => {
-                let mut cert_chain: Vec<X509> = vec![];
+            Some(trusted_certs) => {
+                let mut cert_chain_der: Vec<_> = vec![];
 
                 /* Get certificate chain from 'x5c' or 'x5u' in JWK. */
                 if let Some(x5c) = rsa_jwk.x5c {
                     for base64_der_cert in x5c {
-                        let der_cert = URL_SAFE_NO_PAD.decode(base64_der_cert)?;
-                        let cert = X509::from_der(&der_cert)?;
-                        cert_chain.push(cert)
+                        cert_chain_der.push(URL_SAFE_NO_PAD.decode(base64_der_cert)?);
                     }
                 } else if let Some(x5u) = rsa_jwk.x5u {
-                    download_cert_chain(x5u, &mut cert_chain)?;
-                } else {
+                    for c in download_cert_chain(x5u)?.iter() {
+                        cert_chain_der.push(c.to_der()?);
+                    }
+                }
+
+                if cert_chain_der.len() < 1 {
                     return Err(Error::msg("Missing certificate in Attestation Token JWK"));
                 }
 
                 /* Check certificate is valid and trustworthy */
-                let mut untrusted_stack = Stack::<X509>::new()?;
-                for cert in cert_chain.iter().skip(1) {
-                    untrusted_stack.push(cert.clone())?;
+                let end_entity_cert = EndEntityCert::try_from(cert_chain_der[0].as_slice())?;
+                let mut intermediate_certs = vec![];
+                for cert in cert_chain_der.iter().skip(1) {
+                    intermediate_certs.push(cert.as_slice());
                 }
-                let mut context = X509StoreContext::new()?;
-                if !context.init(trusted_store, &cert_chain[0], &untrusted_stack, |ctx| {
-                    ctx.verify_cert()
-                })? {
-                    return Err(Error::msg("Untrusted certificate in Attestation Token JWK"));
-                };
+
+                let mut trust_anchors = vec![];
+                for der in trusted_certs.iter() {
+                    trust_anchors.push(TrustAnchor::try_from_cert_der(&der)?);
+                }
+
+                let now = webpki::Time::try_from(std::time::SystemTime::now())?;
+                end_entity_cert
+                    .verify_is_valid_tls_server_cert(
+                        SUPPORTED_SIG_ALGS,
+                        &TlsServerTrustAnchors(&trust_anchors),
+                        &intermediate_certs,
+                        now,
+                    )
+                    .context("Untrusted certificate in Attestation Token JWK")?;
 
                 /* Check the public key in JWK is consistent with the public key in certificate */
-                let n = openssl::bn::BigNum::from_slice(&URL_SAFE_NO_PAD.decode(&rsa_jwk.n)?)?;
-                let e = openssl::bn::BigNum::from_slice(&URL_SAFE_NO_PAD.decode(&rsa_jwk.e)?)?;
-                let rsa_public_key = Rsa::from_public_components(n, e)?;
-                let rsa_pkey = PKey::from_rsa(rsa_public_key)?;
-                let cert_pub_key = cert_chain[0].public_key()?;
-                if !cert_pub_key.public_eq(&rsa_pkey) {
+                let n = rsa::BigUint::from_bytes_be(&URL_SAFE_NO_PAD.decode(&rsa_jwk.n)?);
+                let e = rsa::BigUint::from_bytes_be(&URL_SAFE_NO_PAD.decode(&rsa_jwk.e)?);
+                let jwt_pubkey_spki = rsa::RsaPublicKey::new(n, e)?
+                    .to_public_key_der()?
+                    .to_der()?;
+
+                let cert_pubkey_spki =
+                    x509_cert::Certificate::from_der(cert_chain_der[0].as_slice())?
+                        .tbs_certificate
+                        .subject_public_key_info
+                        .to_der()?;
+
+                if cert_pubkey_spki != jwt_pubkey_spki {
                     return Err(Error::msg(
                         "Certificate Public Key Mismatched in Attestation Token",
                     ));
@@ -252,28 +283,26 @@ struct RsaJWK {
     x5c: Option<Vec<String>>,
 }
 
+// RS384 - RSA PKCS#1 signature with SHA-384
 fn rs384_verify(payload: &[u8], signature: &[u8], jwk: &RsaJWK) -> Result<()> {
-    let n = openssl::bn::BigNum::from_slice(&URL_SAFE_NO_PAD.decode(&jwk.n)?)?;
-    let e = openssl::bn::BigNum::from_slice(&URL_SAFE_NO_PAD.decode(&jwk.e)?)?;
-    let rsa_public_key = Rsa::from_public_components(n, e)?;
-    let rsa_pkey = PKey::from_rsa(rsa_public_key)?;
+    let n = rsa::BigUint::from_bytes_be(&URL_SAFE_NO_PAD.decode(&jwk.n)?);
+    let e = rsa::BigUint::from_bytes_be(&URL_SAFE_NO_PAD.decode(&jwk.e)?);
 
-    let mut verifier = Verifier::new(MessageDigest::sha384(), &rsa_pkey)?;
-    verifier.update(payload)?;
-
-    if !verifier.verify(signature)? {
-        return Err(Error::msg("RS384 verify failed"));
-    }
+    let verify_key =
+        rsa::pkcs1v15::VerifyingKey::<sha2::Sha384>::new(rsa::RsaPublicKey::new(n, e)?);
+    verify_key.verify(payload, &signature.try_into()?)?;
 
     Ok(())
 }
 
-fn download_cert_chain(url: String, mut chain: &mut Vec<X509>) -> Result<()> {
+fn download_cert_chain(url: String) -> Result<Vec<x509_cert::Certificate>> {
     let res = reqwest::blocking::get(url)?;
     match res.status() {
         reqwest::StatusCode::OK => {
             let pem_cert_chain = res.text()?;
-            parse_pem_cert_chain(pem_cert_chain, &mut chain)?;
+            return Ok(x509_cert::Certificate::load_pem_chain(
+                pem_cert_chain.as_bytes(),
+            )?);
         }
         _ => {
             return Err(Error::msg(format!(
@@ -282,19 +311,4 @@ fn download_cert_chain(url: String, mut chain: &mut Vec<X509>) -> Result<()> {
             )));
         }
     }
-
-    Ok(())
-}
-
-fn parse_pem_cert_chain(pem_cert_chain: String, chain: &mut Vec<X509>) -> Result<()> {
-    for pem in pem_cert_chain.split("-----END CERTIFICATE-----") {
-        let trimmed = format!("{}\n-----END CERTIFICATE-----", pem.trim());
-        if !trimmed.starts_with("-----BEGIN CERTIFICATE-----") {
-            continue;
-        }
-        let cert = X509::from_pem(trimmed.as_bytes()).context("Invalid PEM certificate chain")?;
-        chain.push(cert);
-    }
-
-    Ok(())
 }
