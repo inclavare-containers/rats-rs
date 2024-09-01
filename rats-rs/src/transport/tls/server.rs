@@ -1,6 +1,6 @@
 use super::{
-    as_raw, as_raw_mut, ossl_init, verify_certificate_default, EpvPkey, GetFd, GetFdDumpImpl,
-    SslMode, TcpWrapper, OPENSSL_EX_DATA_IDX,
+    as_raw, as_raw_mut, ossl_init, verify_certificate_default, EpvPkey, GetFd, SslMode, TcpWrapper,
+    OPENSSL_EX_DATA_IDX,
 };
 use crate::{
     cert::{create::CertBuilder, dice::cbor::parse_evidence_buffer_with_tag},
@@ -26,7 +26,7 @@ use std::{
 
 //TODO: use typestate only impl `VerifyCertExtension` if needed
 pub struct Server {
-    ctx: Option<*mut SSL_CTX>,
+    ctx: *mut SSL_CTX,
     ssl_session: Option<*mut SSL>,
     verify_callback: SSL_verify_cb,
     stream: Box<dyn GetFd>,
@@ -35,14 +35,19 @@ pub struct Server {
 // TODO: use typestate design pattern?
 pub struct TlsServerBuilder {
     verify: SSL_verify_cb,
-    stream: Box<dyn GetFd>,
+    stream: Option<Box<dyn GetFd>>,
     verify_peer: bool,
 }
 
 impl TlsServerBuilder {
     pub fn build(self) -> Result<Server> {
+        ossl_init()?;
+        let ctx = unsafe { SSL_CTX_new(TLS_server_method()) };
+        if ctx.is_null() {
+            return Err(Error::kind(ErrorKind::OsslCtxInitializeFail));
+        }
         let mut s = Server {
-            ctx: None,
+            ctx: ctx,
             ssl_session: None,
             verify_callback: if self.verify_peer {
                 if self.verify.is_some() {
@@ -53,15 +58,22 @@ impl TlsServerBuilder {
             } else {
                 None
             },
-            stream: self.stream,
+            stream: self
+                .stream
+                .ok_or(Error::kind(ErrorKind::OsslTlsBuilderStreamUnset))?,
         };
-        s.init()?;
+        let privkey = DefaultCrypto::gen_private_key(crate::crypto::AsymmetricAlgo::Rsa2048)?;
+        s.use_privkey(&privkey)?;
+        let cert = CertBuilder::new(AutoAttester::new(), HashAlgo::Sha256)
+            .build_with_private_key(&privkey)?
+            .cert_to_der()?;
+        s.use_cert(&cert)?;
         Ok(s)
     }
     pub fn new() -> Self {
         Self {
             verify: None,
-            stream: Box::new(GetFdDumpImpl),
+            stream: None,
             verify_peer: false,
         }
     }
@@ -74,7 +86,7 @@ impl TlsServerBuilder {
         self
     }
     pub fn with_tcp_stream(mut self, stream: TcpStream) -> Self {
-        self.stream = Box::new(TcpWrapper(stream));
+        self.stream = Some(Box::new(TcpWrapper(stream)));
         self
     }
 }
@@ -82,7 +94,7 @@ impl TlsServerBuilder {
 #[maybe_async]
 impl GenericSecureTransPortWrite for Server {
     async fn send(&mut self, bytes: &[u8]) -> Result<()> {
-        if self.ctx.is_none() || self.ssl_session.is_none() {
+        if self.ssl_session.is_none() {
             return Err(Error::kind(ErrorKind::OsslCtxOrSessionUninitialized));
         }
         let res = unsafe {
@@ -102,22 +114,29 @@ impl GenericSecureTransPortWrite for Server {
         if let Some(ssl_session) = self.ssl_session {
             unsafe {
                 SSL_shutdown(ssl_session);
-                SSL_free(ssl_session);
-            }
-        }
-        if let Some(ctx) = self.ctx {
-            unsafe {
-                SSL_CTX_free(ctx);
             }
         }
         Ok(())
     }
 }
 
+impl Drop for Server {
+    fn drop(&mut self) {
+        if let Some(ssl_session) = self.ssl_session {
+            unsafe {
+                SSL_free(ssl_session);
+            }
+        }
+        unsafe {
+            SSL_CTX_free(self.ctx);
+        }
+    }
+}
+
 #[maybe_async]
 impl GenericSecureTransPortRead for Server {
     async fn receive(&mut self, buf: &mut [u8]) -> Result<usize> {
-        if self.ctx.is_none() || self.ssl_session.is_none() {
+        if self.ssl_session.is_none() {
             return Err(Error::kind(ErrorKind::OsslCtxOrSessionUninitialized));
         }
         let res = unsafe {
@@ -137,9 +156,7 @@ impl GenericSecureTransPortRead for Server {
 #[maybe_async]
 impl GenericSecureTransPort for Server {
     async fn negotiate(&mut self) -> Result<()> {
-        let ctx = self
-            .ctx
-            .ok_or(Error::kind(ErrorKind::OsslCtxUninitialize))?;
+        let ctx = self.ctx;
         if self.verify_callback.is_some() {
             let mut mode = SslMode::SSL_VERIFY_NONE;
             mode |= SslMode::SSL_VERIFY_PEER | SslMode::SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
@@ -154,7 +171,7 @@ impl GenericSecureTransPort for Server {
         unsafe {
             X509_STORE_set_ex_data(
                 SSL_CTX_get_cert_store(ctx),
-                OPENSSL_EX_DATA_IDX.lock().unwrap().get(),
+                *OPENSSL_EX_DATA_IDX,
                 as_raw_mut(self),
             );
         }
@@ -178,22 +195,6 @@ impl GenericSecureTransPort for Server {
 }
 
 impl Server {
-    pub fn init(&mut self) -> Result<()> {
-        ossl_init()?;
-        let ctx = unsafe { SSL_CTX_new(TLS_server_method()) };
-        if ctx.is_null() {
-            return Err(Error::kind(ErrorKind::OsslCtxInitializeFail));
-        }
-        self.ctx = Some(ctx);
-        let privkey = DefaultCrypto::gen_private_key(crate::crypto::AsymmetricAlgo::Rsa2048)?;
-        self.use_privkey(&privkey)?;
-        let cert = CertBuilder::new(AutoAttester::new(), HashAlgo::Sha256)
-            .build_with_private_key(&privkey)?
-            .cert_to_der()?;
-        self.use_cert(&cert)?;
-        Ok(())
-    }
-
     pub fn use_privkey(&mut self, privkey: &AsymmetricPrivateKey) -> Result<()> {
         let pkey;
         let epkey: ::libc::c_int;
@@ -209,9 +210,7 @@ impl Server {
                 epkey = EpvPkey::EC.bits();
             }
         }
-        let ctx = self
-            .ctx
-            .ok_or(Error::kind(ErrorKind::OsslCtxUninitialize))?;
+        let ctx = self.ctx;
         let pkey_len = pkey.as_bytes().len() as ::libc::c_long;
         let pkey_buffer = as_raw(&pkey.as_bytes()[0]);
         unsafe {
@@ -224,9 +223,7 @@ impl Server {
     }
 
     pub fn use_cert(&mut self, cert: &Vec<u8>) -> Result<()> {
-        let ctx = self
-            .ctx
-            .ok_or(Error::kind(ErrorKind::OsslCtxUninitialize))?;
+        let ctx = self.ctx;
         let ptr = cert.as_ptr();
         let len = cert.len();
         let res = unsafe {
@@ -245,48 +242,38 @@ impl Server {
 
 #[cfg(test)]
 mod tests {
-    use super::Server;
+    use super::{Server, TlsServerBuilder};
     use crate::{
         cert::create::{CertBuilder, CertBundle},
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
         errors::*,
         tee::AutoAttester,
         transport::{
-            tls::{as_raw_mut, ossl_init, GetFdDumpImpl},
+            tls::{as_raw_mut, ossl_init, GetFd},
             GenericSecureTransPortWrite,
         },
     };
     use core::slice;
     use openssl_sys::*;
-    use std::ptr;
+    use std::{net::TcpStream, ptr};
+    struct GetFdDumpImpl;
+    impl GetFd for GetFdDumpImpl {
+        fn get_fd(&self) -> i32 {
+            0
+        }
+    }
 
     #[test]
-    fn test_server_init() -> Result<()> {
-        let mut s = Server {
-            ctx: None,
-            ssl_session: None,
-            verify_callback: None,
-            stream: Box::new(GetFdDumpImpl),
-        };
-        s.init()?;
-        s.shutdown()?;
-        Ok(())
-    }
-    #[test]
     fn test_server_shutdown() -> Result<()> {
-        let mut s = Server {
-            ctx: None,
-            ssl_session: None,
-            verify_callback: None,
-            stream: Box::new(GetFdDumpImpl),
-        };
-        s.init()?;
+        let mut builder = TlsServerBuilder::new();
+        builder.stream = Some(Box::new(GetFdDumpImpl {}));
+        let mut s = builder.build()?;
         s.shutdown()?;
         Ok(())
     }
 
     fn ossl_get_privkey(s: &mut Server) -> Vec<u8> {
-        let ssl_session = unsafe { SSL_new(s.ctx.unwrap()) };
+        let ssl_session = unsafe { SSL_new(s.ctx) };
         let pkey = unsafe { SSL_get_privatekey(ssl_session) };
         let bio = unsafe { BIO_new(BIO_s_mem()) };
         let res = unsafe {
@@ -314,18 +301,17 @@ mod tests {
 
     #[test]
     fn test_server_use_key() -> Result<()> {
-        let mut s = Server {
-            ctx: None,
-            ssl_session: None,
-            verify_callback: None,
-            stream: Box::new(GetFdDumpImpl),
-        };
         ossl_init()?;
         let ctx = unsafe { SSL_CTX_new(TLS_server_method()) };
         if ctx.is_null() {
             return Err(Error::kind(ErrorKind::OsslCtxInitializeFail));
         }
-        s.ctx = Some(ctx);
+        let mut s = Server {
+            ctx: ctx,
+            ssl_session: None,
+            verify_callback: None,
+            stream: Box::new(GetFdDumpImpl),
+        };
         let privkey = DefaultCrypto::gen_private_key(AsymmetricAlgo::Rsa2048)?;
         let binding = privkey.to_pkcs8_pem()?;
         let privpem = binding.as_bytes();
@@ -338,25 +324,24 @@ mod tests {
 
     #[test]
     fn test_server_use_cert() -> Result<()> {
-        let mut s = Server {
-            ctx: None,
-            ssl_session: None,
-            verify_callback: None,
-            stream: Box::new(GetFdDumpImpl),
-        };
         ossl_init()?;
         let ctx = unsafe { SSL_CTX_new(TLS_server_method()) };
         if ctx.is_null() {
             return Err(Error::kind(ErrorKind::OsslCtxInitializeFail));
         }
-        s.ctx = Some(ctx);
+        let mut s = Server {
+            ctx: ctx,
+            ssl_session: None,
+            verify_callback: None,
+            stream: Box::new(GetFdDumpImpl),
+        };
         let privkey = DefaultCrypto::gen_private_key(AsymmetricAlgo::Rsa2048)?;
         let bundle = CertBuilder::new(AutoAttester::new(), HashAlgo::Sha256)
             .build_with_private_key(&privkey)?;
         let cert = bundle.cert_to_der()?;
         println!("cert.pem: {}", bundle.cert_to_pem()?);
         s.use_cert(&cert)?;
-        let raw_cert = unsafe { SSL_CTX_get0_certificate(s.ctx.unwrap()) };
+        let raw_cert = unsafe { SSL_CTX_get0_certificate(s.ctx) };
         let mut raw_ptr = ptr::null_mut::<u8>();
         let len = unsafe { i2d_X509(raw_cert, &mut raw_ptr as *mut *mut u8) };
         let now = unsafe { slice::from_raw_parts(raw_ptr as *const u8, len as usize).to_vec() };
