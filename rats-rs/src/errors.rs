@@ -64,6 +64,8 @@ pub enum ErrorKind {
 
     SpdmlibError,
 
+    OsslTlsBuilderStreamUnset,
+
     OsslUnsupportedPkeyAlgo,
 
     OsslCtxUninitialize,

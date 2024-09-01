@@ -4,20 +4,23 @@ mod server;
 use super::{Error, ErrorKind, Result};
 use crate::{
     cert::{
+        create::CertBuilder,
         dice::extensions::{OID_TCG_DICE_ENDORSEMENT_MANIFEST, OID_TCG_DICE_TAGGED_EVIDENCE},
         verify::{
-            verify_cert_der, CertVerifier, VerifiyPolicy, VerifiyPolicy::Contains,
+            verify_cert_der, CertVerifier,
+            VerifiyPolicy::{self, Contains},
             VerifyPolicyOutput,
         },
     },
-    tee::claims::Claims,
+    crypto::{AsymmetricAlgo, AsymmetricPrivateKey, DefaultCrypto, HashAlgo},
+    tee::{claims::Claims, AutoAttester},
 };
 use bitflags::bitflags;
 pub use client::{Client, TlsClientBuilder};
 use lazy_static::lazy_static;
-use libc::c_int;
+use libc::*;
 use log::{debug, error};
-use openssl_sys::*;
+pub use openssl_sys::*;
 use pkcs8::ObjectIdentifier;
 pub use server::{Server, TlsServerBuilder};
 use std::{
@@ -29,30 +32,14 @@ use std::{
 };
 
 lazy_static! {
-    static ref OPENSSL_EX_DATA_IDX: Arc<Mutex<Cell<i32>>> = unsafe {
-        Arc::new(Mutex::new(Cell::new(CRYPTO_get_ex_new_index(
-            4,
-            0,
-            ptr::null_mut(),
-            None,
-            None,
-            None,
-        ))))
-    };
+    static ref OPENSSL_EX_DATA_IDX: i32 =
+        unsafe { CRYPTO_get_ex_new_index(4, 0, ptr::null_mut(), None, None, None,) };
 }
 
 static START: Once = Once::new();
 
 trait GetFd {
     fn get_fd(&self) -> i32;
-}
-
-struct GetFdDumpImpl;
-
-impl GetFd for GetFdDumpImpl {
-    fn get_fd(&self) -> i32 {
-        0
-    }
 }
 
 struct TcpWrapper(TcpStream);
@@ -98,6 +85,8 @@ bitflags! {
     }
 }
 
+// Initialize OpenSSL, referring to the rat-tls repository
+// https://github.com/inclavare-containers/rats-tls/blob/cf5e911a480f7120da480f046417a209e222e101/src/tls_wrappers/openssl/init.c#L11
 pub fn ossl_init() -> Result<()> {
     START.call_once(|| unsafe {
         OPENSSL_init_crypto(
