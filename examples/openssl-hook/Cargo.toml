@@ -1,5 +1,5 @@
 [package]
-name = "openssl_hook"
+name = "openssl-hook"
 edition.workspace = true
 version.workspace = true
 readme.workspace = true
