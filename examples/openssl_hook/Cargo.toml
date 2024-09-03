@@ -1,0 +1,18 @@
+[package]
+name = "openssl_hook"
+edition.workspace = true
+version.workspace = true
+readme.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ctor = "0.2.8"
+log = {workspace = true}
+env_logger = {workspace = true}
+libc = "0.2"
+anyhow = {workspace = true}
+lazy_static = "1.5"
+rats-rs = {path = "../../rats-rs", features = ["is-sync"]}
