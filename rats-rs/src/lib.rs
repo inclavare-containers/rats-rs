@@ -5,7 +5,7 @@
 #![allow(unused_imports)]
 
 pub mod cert;
-mod crypto;
+pub mod crypto;
 pub mod errors;
 pub mod tee;
 pub mod transport;

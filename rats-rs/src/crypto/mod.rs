@@ -1,6 +1,6 @@
 use crate::errors::*;
 
-use pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding};
+use pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding, SecretDocument};
 use rsa::traits::PublicKeyParts;
 use sha2::Digest as _;
 use zeroize::Zeroizing;
@@ -37,6 +37,21 @@ impl AsymmetricPrivateKey {
             | AsymmetricPrivateKey::Rsa4096(key) => key.to_pkcs8_pem(LineEnding::LF)?,
             AsymmetricPrivateKey::P256(key) => key.to_pkcs8_pem(LineEnding::LF)?,
         })
+    }
+
+    pub fn to_pkcs8_der(&self) -> Result<SecretDocument> {
+        let pkey;
+        match self {
+            AsymmetricPrivateKey::Rsa2048(key)
+            | AsymmetricPrivateKey::Rsa3072(key)
+            | AsymmetricPrivateKey::Rsa4096(key) => {
+                pkey = key.to_pkcs8_der()?;
+            }
+            AsymmetricPrivateKey::P256(key) => {
+                pkey = key.to_pkcs8_der()?;
+            }
+        }
+        return Ok(pkey);
     }
 
     pub fn from_pkcs8_pem(private_key_pkcs8: &str) -> Result<Self> {
