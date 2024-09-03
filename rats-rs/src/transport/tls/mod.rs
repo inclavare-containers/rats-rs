@@ -115,7 +115,6 @@ pub extern "C" fn verify_certificate_default(
         debug!("preverify_ok is 0");
         let err = unsafe { X509_STORE_CTX_get_error(ctx) };
         if err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT {
-            debug!("enter here!");
             return 1;
         }
         error!("Failed on pre-verification due to {}\n", err);
