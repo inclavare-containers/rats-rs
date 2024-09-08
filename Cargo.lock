@@ -882,6 +882,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d52a7e408202050813e6f1d9addadcaafef3dca7530c7ddfb005d4081cce6779"
 
 [[package]]
+name = "flatten-json-object"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9539d6d8c87acbf7c3189fb4d1c8ce926de16369212e97ba1629b62febb3d512"
+dependencies = [
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2029,6 +2039,7 @@ dependencies = [
  "codec",
  "const-oid",
  "env_logger 0.11.2",
+ "flatten-json-object",
  "hex",
  "indexmap 2.2.6",
  "intel-dcap",

@@ -1,5 +1,6 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
+use flatten_json_object::Flattener;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use serde_json::{json, Value};
@@ -127,42 +128,21 @@ impl GenericEvidence for CocoAsToken {
         let claims = URL_SAFE_NO_PAD.decode(split_token[1])?;
         let claims_value = serde_json::from_slice::<Value>(&claims)?;
 
-        Ok(match claims_value {
+        let flattened_claims_value = Flattener::new()
+            .flatten(&claims_value)
+            .context("Failed to flatten JWT claims JSON object")?;
+
+        Ok(match flattened_claims_value {
             Value::Object(m) => m
                 .into_iter()
-                .map(|(k, v)| -> Result<_> {
-                    let v = match v {
-                        Value::Null => vec![],
-                        Value::Bool(b) => {
-                            if b {
-                                0x1u8
-                            } else {
-                                0x0u8
-                            }
-                        }
-                        .to_le_bytes()
-                        .into(),
-                        Value::Number(n) => {
-                            if n.is_f64() {
-                                n.to_string().into_bytes()
-                            } else if n.is_i64() {
-                                n.as_i64()
-                                    .ok_or("number should be i64")?
-                                    .to_le_bytes()
-                                    .into()
-                            } else {
-                                n.as_u64()
-                                    .ok_or("number should be u64")?
-                                    .to_le_bytes()
-                                    .into()
-                            }
-                        }
-                        Value::String(s) => s.as_bytes().into(),
-                        v => v.to_string().into(),
-                    };
-                    Ok((k, v))
+                .filter_map(|(k, v)| -> Option<_> {
+                    match v {
+                        Value::String(s) => Some((k, s.as_bytes().into())),
+                        Value::Null => None,
+                        v => Some((k, v.to_string().into())),
+                    }
                 })
-                .collect::<Result<Claims>>()?,
+                .collect::<Claims>(),
             _ => {
                 return Err(Error::kind_with_msg(
                     ErrorKind::CocoParseTokenFailed,

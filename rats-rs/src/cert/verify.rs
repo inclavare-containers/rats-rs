@@ -234,7 +234,7 @@ impl CertVerifier {
                     .iter()
                     .map(|(name, value)| match std::str::from_utf8(value.as_ref()) {
                         Ok(s) if !s.contains('\0') => {
-                            format!("\t{}:\t{} (b\"{}\")", name, hex::encode(value), s)
+                            format!("\t{}:\tb\"{}\"", name, s)
                         }
                         _ => format!("\t{}:\t{}", name, hex::encode(value)),
                     });

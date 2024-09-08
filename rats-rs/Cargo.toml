@@ -49,6 +49,7 @@ time = { version = "0.3.23", features = ["std"] }
 reqwest = { version = "0.11", features = ["json", "blocking", "rustls-tls"], default-features = false, optional = true }
 strum = "0.26.2"
 strum_macros = "0.26.2"
+flatten-json-object = {version = "0.6.1", optional = true}
 
 [features]
 async-tokio = ["dep:tokio"]
@@ -64,7 +65,7 @@ attester-sgx-dcap-enclave = [] # TODO: plain enclave mode
 verifier-sgx-dcap = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
 attester-tdx = ["dep:tdx-attest-rs", "dep:intel-dcap"]
 verifier-tdx = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
-coco = ["dep:ttrpc-codegen", "dep:ttrpc", "dep:protobuf", "dep:tonic-build", "dep:tonic", "dep:prost", "dep:tokio", "dep:webpki", "dep:reqwest"]
+coco = ["dep:ttrpc-codegen", "dep:ttrpc", "dep:protobuf", "dep:tonic-build", "dep:tonic", "dep:prost", "dep:tokio", "dep:webpki", "dep:reqwest", "dep:flatten-json-object"]
 
 [dev-dependencies]
 rayon = "1.10.0"
