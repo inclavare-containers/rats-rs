@@ -6,6 +6,9 @@ use crate::errors::*;
 use crate::tee::GenericAttester;
 use occlum_dcap::{sgx_report_data_t, DcapQuote};
 
+#[cfg(feature = "async-tokio")]
+use tokio::task;
+
 pub struct SgxDcapAttester {}
 
 impl SgxDcapAttester {
@@ -14,10 +17,11 @@ impl SgxDcapAttester {
     }
 }
 
+#[maybe_async::maybe_async]
 impl GenericAttester for SgxDcapAttester {
     type Evidence = SgxDcapEvidence;
 
-    fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
+    async fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
         if cfg!(feature = "attester-sgx-dcap-occlum") {
             if report_data.len() > 64 {
                 Err(Error::kind_with_msg(
@@ -34,13 +38,29 @@ impl GenericAttester for SgxDcapAttester {
             let mut sgx_report_data = sgx_report_data_t::default();
             sgx_report_data.d[..report_data.len()].clone_from_slice(report_data);
 
-            handler
-                .generate_quote(
-                    occlum_quote.as_mut_ptr(),
-                    &sgx_report_data as *const sgx_report_data_t,
-                )
-                .kind(ErrorKind::SgxDcapAttesterGenerateQuoteFailed)
-                .context("failed at generate_quote()")?;
+            let ptr = occlum_quote.as_mut_ptr() as usize;
+
+            #[cfg(not(feature = "is-sync"))]
+            {
+                task::spawn_blocking(move || {
+                    handler
+                        .generate_quote(
+                            ptr as *mut u8,
+                            &sgx_report_data as *const sgx_report_data_t,
+                        )
+                        .kind(ErrorKind::SgxDcapAttesterGenerateQuoteFailed)
+                        .context("failed at generate_quote()");
+                })
+                .await?;
+            }
+
+            #[cfg(feature = "is-sync")]
+            {
+                handler
+                    .generate_quote(ptr as *mut u8, &sgx_report_data as *const sgx_report_data_t)
+                    .kind(ErrorKind::SgxDcapAttesterGenerateQuoteFailed)
+                    .context("failed at generate_quote()");
+            }
 
             SgxDcapEvidence::new_from_checked(occlum_quote)
         } else {

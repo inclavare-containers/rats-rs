@@ -32,6 +32,8 @@ pub struct Server {
     stream: Box<dyn GetFd>,
 }
 
+unsafe impl Send for Server {}
+
 // TODO: use typestate design pattern?
 pub struct TlsServerBuilder {
     verify: SSL_verify_cb,
@@ -40,7 +42,8 @@ pub struct TlsServerBuilder {
 }
 
 impl TlsServerBuilder {
-    pub fn build(self) -> Result<Server> {
+    #[maybe_async]
+    pub async fn build(self) -> Result<Server> {
         ossl_init()?;
         let ctx = unsafe { SSL_CTX_new(TLS_server_method()) };
         if ctx.is_null() {
@@ -65,7 +68,8 @@ impl TlsServerBuilder {
         let privkey = DefaultCrypto::gen_private_key(crate::crypto::AsymmetricAlgo::Rsa2048)?;
         s.use_privkey(&privkey)?;
         let cert = CertBuilder::new(AutoAttester::new(), HashAlgo::Sha256)
-            .build_with_private_key(&privkey)?
+            .build_with_private_key(&privkey)
+            .await?
             .cert_to_der()?;
         s.use_cert(&cert)?;
         Ok(s)
@@ -254,8 +258,10 @@ mod tests {
         },
     };
     use core::slice;
+    use maybe_async::maybe_async;
     use openssl_sys::*;
     use std::{net::TcpStream, ptr};
+
     struct GetFdDumpImpl;
     impl GetFd for GetFdDumpImpl {
         fn get_fd(&self) -> i32 {
@@ -263,12 +269,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_server_shutdown() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async]
+    async fn test_server_shutdown() -> Result<()> {
         let mut builder = TlsServerBuilder::new();
         builder.stream = Some(Box::new(GetFdDumpImpl {}));
-        let mut s = builder.build()?;
-        s.shutdown()?;
+        let mut s = builder.build().await?;
+        s.shutdown().await?;
         Ok(())
     }
 
@@ -299,8 +307,10 @@ mod tests {
         now
     }
 
-    #[test]
-    fn test_server_use_key() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async]
+    async fn test_server_use_key() -> Result<()> {
         ossl_init()?;
         let ctx = unsafe { SSL_CTX_new(TLS_server_method()) };
         if ctx.is_null() {
@@ -318,12 +328,14 @@ mod tests {
         s.use_privkey(&privkey)?;
         let now = ossl_get_privkey(&mut s);
         assert_eq!(privpem, now.as_slice());
-        s.shutdown()?;
+        s.shutdown().await?;
         Ok(())
     }
 
-    #[test]
-    fn test_server_use_cert() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async]
+    async fn test_server_use_cert() -> Result<()> {
         ossl_init()?;
         let ctx = unsafe { SSL_CTX_new(TLS_server_method()) };
         if ctx.is_null() {
@@ -337,7 +349,8 @@ mod tests {
         };
         let privkey = DefaultCrypto::gen_private_key(AsymmetricAlgo::Rsa2048)?;
         let bundle = CertBuilder::new(AutoAttester::new(), HashAlgo::Sha256)
-            .build_with_private_key(&privkey)?;
+            .build_with_private_key(&privkey)
+            .await?;
         let cert = bundle.cert_to_der()?;
         println!("cert.pem: {}", bundle.cert_to_pem()?);
         s.use_cert(&cert)?;
@@ -346,7 +359,7 @@ mod tests {
         let len = unsafe { i2d_X509(raw_cert, &mut raw_ptr as *mut *mut u8) };
         let now = unsafe { slice::from_raw_parts(raw_ptr as *const u8, len as usize).to_vec() };
         assert_eq!(cert, now);
-        s.shutdown()?;
+        s.shutdown().await?;
         Ok(())
     }
 }

@@ -70,9 +70,10 @@ impl<A: GenericAttester> CertBuilder<A> {
         self
     }
 
-    pub fn build(&self, private_key_algo: AsymmetricAlgo) -> Result<CertBundle<A::Evidence>> {
+    #[maybe_async::maybe_async]
+    pub async fn build(&self, private_key_algo: AsymmetricAlgo) -> Result<CertBundle<A::Evidence>> {
         let key = DefaultCrypto::gen_private_key(private_key_algo)?;
-        let (cert, evidence) = self.build_with_private_key_inner(&key)?;
+        let (cert, evidence) = self.build_with_private_key_inner(&key).await?;
 
         Ok(CertBundle {
             private_key: key,
@@ -81,11 +82,12 @@ impl<A: GenericAttester> CertBuilder<A> {
         })
     }
 
-    pub fn build_with_private_key(
+    #[maybe_async::maybe_async]
+    pub async fn build_with_private_key(
         &self,
         key: &AsymmetricPrivateKey,
     ) -> Result<CertBundle<A::Evidence>> {
-        let (cert, evidence) = self.build_with_private_key_inner(&key)?;
+        let (cert, evidence) = self.build_with_private_key_inner(&key).await?;
 
         Ok(CertBundle {
             private_key: key.clone(),
@@ -94,7 +96,8 @@ impl<A: GenericAttester> CertBuilder<A> {
         })
     }
 
-    fn build_with_private_key_inner(
+    #[maybe_async::maybe_async]
+    async fn build_with_private_key_inner(
         &self,
         key: &AsymmetricPrivateKey,
     ) -> Result<(Certificate, A::Evidence)> {
@@ -115,7 +118,7 @@ impl<A: GenericAttester> CertBuilder<A> {
         let claims_buffer_hash = DefaultCrypto::hash(HashAlgo::Sha256, &claims_buffer);
 
         /* Generate evidence buffer */
-        let evidence = self.attester.get_evidence(&claims_buffer_hash)?;
+        let evidence = self.attester.get_evidence(&claims_buffer_hash).await?;
         let evidence_buffer = generate_evidence_buffer_with_tag(
             evidence.get_dice_cbor_tag(),
             evidence.get_dice_raw_evidence(),
@@ -146,8 +149,10 @@ pub mod tests {
     #[allow(unused_imports)]
     use super::*;
 
-    #[test]
-    fn test_get_attestation_certificate() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async::maybe_async]
+    async fn test_get_attestation_certificate() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
             return Ok(());
@@ -161,7 +166,8 @@ pub mod tests {
         let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
+            .build(AsymmetricAlgo::P256)
+            .await?;
 
         println!("generated cert:\n{}", cert_bundle.cert_to_pem()?);
         println!(
@@ -174,7 +180,8 @@ pub mod tests {
         let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims)
-            .build_with_private_key(&key)?;
+            .build_with_private_key(&key)
+            .await?;
 
         println!("generated cert:\n{}", cert_bundle.cert_to_pem()?);
         println!(

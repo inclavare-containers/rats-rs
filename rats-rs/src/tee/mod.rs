@@ -26,11 +26,12 @@ pub trait GenericEvidence: Any {
 }
 
 /// Trait representing a generic attester.
+#[maybe_async::maybe_async]
 pub trait GenericAttester {
     type Evidence: GenericEvidence;
 
     /// Generate evidence based on the provided report data.
-    fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence>;
+    async fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence>;
 }
 
 /// Trait representing a generic verifier.
@@ -122,10 +123,11 @@ impl AutoAttester{
     }
 }
 
+#[maybe_async::maybe_async]
 impl GenericAttester for AutoAttester {
     type Evidence = AutoEvidence;
 
-    fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
+    async fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
         let tee_type = TeeType::detect_env();
 
         if let Some(tee_type) = tee_type {
@@ -133,12 +135,12 @@ impl GenericAttester for AutoAttester {
                 #[cfg(feature = "attester-sgx-dcap")]
                 TeeType::SgxDcap => {
                     let attester = sgx_dcap::attester::SgxDcapAttester::new();
-                    attester.get_evidence(report_data).map(|ev|AutoEvidence(Box::new(ev) as Box<dyn GenericEvidence>)) 
+                    attester.get_evidence(report_data).await.map(|ev|AutoEvidence(Box::new(ev) as Box<dyn GenericEvidence>)) 
                 }
                 #[cfg(feature = "attester-tdx")]
                 TeeType::Tdx => {
                     let attester = tdx::attester::TdxAttester::new();
-                    attester.get_evidence(report_data).map(|ev|AutoEvidence(Box::new(ev) as Box<dyn GenericEvidence>)) 
+                    attester.get_evidence(report_data).await.map(|ev|AutoEvidence(Box::new(ev) as Box<dyn GenericEvidence>)) 
                 }
                 #[allow(unreachable_patterns)]
                 _ => {
@@ -215,8 +217,10 @@ pub mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_auto_attester_and_auto_verifier_on_sgx_dcap() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async::maybe_async]
+    async fn test_auto_attester_and_auto_verifier_on_sgx_dcap() -> Result<()> {
         if TeeType::detect_env() != Some(TeeType::SgxDcap) {
             /* skip */
             return Ok(());
@@ -224,7 +228,7 @@ pub mod tests {
 
         let report_data = b"test_report_data";
         let attester = AutoAttester::new();
-        let evidence = attester.get_evidence(report_data)?;
+        let evidence = attester.get_evidence(report_data).await?;
         assert_eq!(evidence.get_tee_type(), TeeType::SgxDcap);
         let verifier = AutoVerifier::new();
         assert_eq!(verifier.verify_evidence(&evidence, report_data), Ok(()));
@@ -239,8 +243,10 @@ pub mod tests {
     }
 
 
-    #[test]
-    fn test_auto_attester_and_auto_verifier_on_non_tee() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async::maybe_async]
+    async fn test_auto_attester_and_auto_verifier_on_non_tee() -> Result<()> {
         if TeeType::detect_env() != None {
             /* skip */
             return Ok(());
@@ -248,7 +254,7 @@ pub mod tests {
     
         let report_data = b"test_report_data";
         let attester = AutoAttester::new();
-        let res = attester.get_evidence(report_data);
+        let res = attester.get_evidence(report_data).await;
         assert!(res.is_err());
         let Err(err) = res else {panic!()};
         assert_eq!(err.get_kind(), ErrorKind::UnsupportedTeeType);

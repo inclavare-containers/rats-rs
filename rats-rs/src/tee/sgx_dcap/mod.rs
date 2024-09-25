@@ -29,8 +29,10 @@ pub mod tests {
         verifier::SgxDcapVerifier,
     };
 
-    #[test]
-    fn test_attester_and_verifier() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async::maybe_async]
+    async fn test_attester_and_verifier() -> Result<()> {
         if TeeType::detect_env() != Some(TeeType::SgxDcap) {
             /* skip */
             return Ok(());
@@ -38,7 +40,7 @@ pub mod tests {
 
         let report_data = b"test_report_data";
         let attester = SgxDcapAttester::new();
-        let evidence = attester.get_evidence(report_data)?;
+        let evidence = attester.get_evidence(report_data).await?;
         assert_eq!(evidence.get_tee_type(), TeeType::SgxDcap);
         let verifier = SgxDcapVerifier::new();
         assert_eq!(verifier.verify_evidence(&evidence, report_data), Ok(()));
@@ -50,7 +52,6 @@ pub mod tests {
         assert!(claims.contains_key(BUILT_IN_CLAIM_COMMON_QUOTE_TYPE));
         assert!(claims.contains_key(BUILT_IN_CLAIM_SGX_MR_ENCLAVE));
         assert!(claims.contains_key(BUILT_IN_CLAIM_SGX_MR_SIGNER));
-
 
         assert_eq!(
             claims.get(BUILT_IN_CLAIM_COMMON_QUOTE_TYPE),
