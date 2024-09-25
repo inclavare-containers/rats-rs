@@ -63,12 +63,14 @@ impl SpdmResponderBuilder {
         self
     }
 
-    pub fn build_with_tcp_stream(&self, stream: TcpStream) -> Result<SpdmResponder> {
+    #[maybe_async::maybe_async]
+    pub async fn build_with_tcp_stream(&self, stream: TcpStream) -> Result<SpdmResponder> {
         let (cert_provider, asym_signer, measurement_provider) = if self.attest_self {
             // TODO: generate cert and key for each handshake and check nonce from user
             let attester = AutoAttester::new();
-            let cert_bundle =
-                CertBuilder::new(attester, HashAlgo::Sha256).build(AsymmetricAlgo::P256)?;
+            let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
+                .build(AsymmetricAlgo::P256)
+                .await?;
             (
                 Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
                     as Box<dyn CertProvider>,
@@ -354,7 +356,9 @@ pub mod tests {
                 )
             } else {
                 let attester = AutoAttester::new();
-                let cert_bundle = CertBuilder::new(attester, hash_algo).build(asym_algo)?;
+                let cert_bundle = CertBuilder::new(attester, hash_algo)
+                    .build(asym_algo)
+                    .await?;
                 (
                     Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
                         as Box<dyn CertProvider>,
@@ -411,8 +415,10 @@ pub mod tests {
 
     const THREAD_STACK_SIZE: usize = 8 * 1024 * 1024;
 
-    #[test]
-    fn test_spdm_over_tcp() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async::maybe_async]
+    async fn test_spdm_over_tcp() -> Result<()> {
         let _ = env_logger::builder()
             .is_test(true)
             .filter_level(LevelFilter::Trace)

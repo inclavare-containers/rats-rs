@@ -37,8 +37,10 @@ pub mod tests {
         verifier::TdxVerifier,
     };
 
-    #[test]
-    fn test_attester_and_verifier() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async::maybe_async]
+    async fn test_attester_and_verifier() -> Result<()> {
         if TeeType::detect_env() != Some(TeeType::Tdx) {
             /* skip */
             return Ok(());
@@ -46,7 +48,7 @@ pub mod tests {
 
         let report_data = b"test_report_data";
         let attester = TdxAttester::new();
-        let evidence = attester.get_evidence(report_data)?;
+        let evidence = attester.get_evidence(report_data).await?;
         assert_eq!(evidence.get_tee_type(), TeeType::Tdx);
         let verifier = TdxVerifier::new();
         assert_eq!(verifier.verify_evidence(&evidence, report_data), Ok(()));

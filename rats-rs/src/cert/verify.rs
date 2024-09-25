@@ -234,8 +234,10 @@ pub mod tests {
     #[allow(unused_imports)]
     use super::*;
 
-    #[test]
-    fn test_verify_cert_der() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async::maybe_async]
+    async fn test_verify_cert_der() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
             return Ok(());
@@ -249,7 +251,8 @@ pub mod tests {
         let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
+            .build(AsymmetricAlgo::P256)
+            .await?;
         let cert = cert_bundle.cert_to_der()?;
 
         let parsed_claims = verify_cert_der(&cert)?;
@@ -263,8 +266,10 @@ pub mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_verify_attestation_certificate() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async::maybe_async]
+    async fn test_verify_attestation_certificate() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
             return Ok(());
@@ -278,7 +283,8 @@ pub mod tests {
         let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
+            .build(AsymmetricAlgo::P256)
+            .await?;
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
@@ -303,8 +309,10 @@ pub mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_verify_attestation_certificate_with_claims_overriding() -> Result<()> {
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    #[maybe_async::maybe_async]
+    async fn test_verify_attestation_certificate_with_claims_overriding() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
             return Ok(());
@@ -320,7 +328,8 @@ pub mod tests {
         let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
+            .build(AsymmetricAlgo::P256)
+            .await?;
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
