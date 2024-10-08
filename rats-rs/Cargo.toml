@@ -39,7 +39,7 @@ indexmap = {version = "2.2.6", features = ["std", "serde"]}
 tdx-attest-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
 intel-dcap = {path = "../intel-dcap", optional = true}
 ttrpc = {version = "0.8.0", optional = true}
-protobuf = {version = "3.4.0", optional = true}
+protobuf = {version = "~3.4.0", optional = true}
 tonic = {version = "0.8.1", optional = true}
 prost = {version = "0.11.0", optional = true}
 webpki = {version = "0.22.4", optional = true, features= ["alloc", "std"]}
