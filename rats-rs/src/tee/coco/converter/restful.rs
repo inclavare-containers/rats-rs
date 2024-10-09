@@ -32,7 +32,7 @@ impl CocoRestfulConverter {
             .build()?;
 
         Ok(Self {
-            as_addr: as_addr.to_owned(),
+            as_addr: as_addr.trim_end_matches('/').to_owned(),
             client,
             policy_ids: policy_ids.to_owned(),
         })
