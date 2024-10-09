@@ -40,7 +40,7 @@ impl GenericAttester for SgxDcapAttester {
 
             let ptr = occlum_quote.as_mut_ptr() as usize;
 
-            #[cfg(not(feature = "is-sync"))]
+            #[cfg(feature = "async-tokio")]
             {
                 task::spawn_blocking(move || {
                     handler
@@ -54,7 +54,7 @@ impl GenericAttester for SgxDcapAttester {
                 .await?;
             }
 
-            #[cfg(feature = "is-sync")]
+            #[cfg(not(feature = "async-tokio"))]
             {
                 handler
                     .generate_quote(ptr as *mut u8, &sgx_report_data as *const sgx_report_data_t)

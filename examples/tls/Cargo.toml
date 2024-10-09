@@ -6,7 +6,7 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
-rats-rs = {path = "../../rats-rs", features = ["is-sync"]}
+rats-rs = {path = "../../rats-rs", features = ["transport-tls"]}
 env_logger = {workspace = true}
 clap = {version = "4.5.4", features = ["derive"]}
 anyhow = {workspace = true}

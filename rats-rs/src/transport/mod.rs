@@ -4,6 +4,9 @@ pub mod spdm;
 #[cfg(feature = "transport-tls")]
 pub mod tls;
 
+#[cfg(feature = "transport-rustls")]
+pub mod rustls;
+
 use crate::errors::*;
 use maybe_async::maybe_async;
 

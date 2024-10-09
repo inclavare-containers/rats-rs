@@ -32,7 +32,7 @@ impl GenericAttester for TdxAttester {
         let result;
         let quote;
 
-        #[cfg(not(feature = "is-sync"))]
+        #[cfg(feature = "async-tokio")]
         {
             (result, quote) = task::spawn_blocking(move || {
                 tdx_attest_rs::tdx_att_get_quote(
@@ -46,7 +46,7 @@ impl GenericAttester for TdxAttester {
             .expect("Failed to execute blocking operation");
         }
 
-        #[cfg(feature = "is-sync")]
+        #[cfg(not(feature = "async-tokio"))]
         {
             (result, quote) = tdx_attest_rs::tdx_att_get_quote(
                 Some(&tdx_report_data),
