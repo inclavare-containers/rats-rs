@@ -1,0 +1,15 @@
+[package]
+name = "rustls"
+edition.workspace = true
+version.workspace = true
+readme.workspace = true
+license.workspace = true
+
+[dependencies]
+rats-rs = {path = "../../rats-rs", features = ["transport-rustls"]}
+env_logger = {workspace = true}
+clap = {version = "4.5.4", features = ["derive"]}
+anyhow = {workspace = true}
+log = {workspace = true}
+rand = {version = "0.8.5", features = ["small_rng"]}
+tokio = {version = "1.36.0", features = ["full"]}
