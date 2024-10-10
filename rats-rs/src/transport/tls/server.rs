@@ -269,9 +269,9 @@ mod tests {
         }
     }
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async]
     async fn test_server_shutdown() -> Result<()> {
         let mut builder = TlsServerBuilder::new();
         builder.stream = Some(Box::new(GetFdDumpImpl {}));
@@ -307,9 +307,9 @@ mod tests {
         now
     }
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async]
     async fn test_server_use_key() -> Result<()> {
         ossl_init()?;
         let ctx = unsafe { SSL_CTX_new(TLS_server_method()) };
@@ -332,9 +332,9 @@ mod tests {
         Ok(())
     }
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async]
     async fn test_server_use_cert() -> Result<()> {
         ossl_init()?;
         let ctx = unsafe { SSL_CTX_new(TLS_server_method()) };

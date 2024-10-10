@@ -415,9 +415,9 @@ pub mod tests {
 
     const THREAD_STACK_SIZE: usize = 8 * 1024 * 1024;
 
+    #[maybe_async::maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async::maybe_async]
     async fn test_spdm_over_tcp() -> Result<()> {
         let _ = env_logger::builder()
             .is_test(true)

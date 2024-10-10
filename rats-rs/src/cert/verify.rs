@@ -219,8 +219,8 @@ fn extract_ext_with_oid<'a>(cert: &'a Certificate, oid: &ObjectIdentifier) -> Op
 #[cfg(test)]
 pub mod tests {
 
-    use indexmap::IndexMap;
-
+    #[allow(unused_imports)]
+    use super::*;
     use crate::{
         cert::create::CertBuilder,
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
@@ -230,13 +230,12 @@ pub mod tests {
             AutoAttester, TeeType,
         },
     };
+    use indexmap::IndexMap;
+    use maybe_async::maybe_async;
 
-    #[allow(unused_imports)]
-    use super::*;
-
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async::maybe_async]
     async fn test_verify_cert_der() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
@@ -266,9 +265,9 @@ pub mod tests {
         Ok(())
     }
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async::maybe_async]
     async fn test_verify_attestation_certificate() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
@@ -309,9 +308,9 @@ pub mod tests {
         Ok(())
     }
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async::maybe_async]
     async fn test_verify_attestation_certificate_with_claims_overriding() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */

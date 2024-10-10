@@ -212,14 +212,13 @@ impl GenericVerifier for AutoVerifier {
 #[cfg(test)]
 pub mod tests {
     use tests::claims::{BUILT_IN_CLAIM_COMMON_QUOTE, BUILT_IN_CLAIM_COMMON_QUOTE_TYPE};
-
     use crate::errors::*;
-
     use super::*;
+    use maybe_async::maybe_async;
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async::maybe_async]
     async fn test_auto_attester_and_auto_verifier_on_sgx_dcap() -> Result<()> {
         if TeeType::detect_env() != Some(TeeType::SgxDcap) {
             /* skip */
@@ -243,9 +242,9 @@ pub mod tests {
     }
 
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async::maybe_async]
     async fn test_auto_attester_and_auto_verifier_on_non_tee() -> Result<()> {
         if TeeType::detect_env() != None {
             /* skip */

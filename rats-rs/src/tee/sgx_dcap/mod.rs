@@ -23,15 +23,16 @@ pub mod tests {
             GenericAttester, GenericEvidence, GenericVerifier, TeeType,
         },
     };
+    use maybe_async::maybe_async;
     use tests::{
         attester::SgxDcapAttester,
         claims::{BUILT_IN_CLAIM_SGX_MR_ENCLAVE, BUILT_IN_CLAIM_SGX_MR_SIGNER},
         verifier::SgxDcapVerifier,
     };
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async::maybe_async]
     async fn test_attester_and_verifier() -> Result<()> {
         if TeeType::detect_env() != Some(TeeType::SgxDcap) {
             /* skip */
