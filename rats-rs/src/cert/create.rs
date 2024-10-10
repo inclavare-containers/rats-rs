@@ -145,13 +145,14 @@ pub mod tests {
         errors::*,
         tee::{claims::Claims, AutoAttester, TeeType},
     };
+    use maybe_async::maybe_async;
 
     #[allow(unused_imports)]
     use super::*;
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async::maybe_async]
     async fn test_get_attestation_certificate() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */

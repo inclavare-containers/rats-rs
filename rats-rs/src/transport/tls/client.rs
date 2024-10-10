@@ -240,7 +240,7 @@ impl Client {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::{Client, TlsClientBuilder};
     use crate::{
         cert::create::CertBuilder,
@@ -267,9 +267,9 @@ mod tests {
         }
     }
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async]
     async fn test_client_shutdown() -> Result<()> {
         let mut builder = TlsClientBuilder::new();
         builder.stream = Some(Box::new(GetFdDumpImpl));
@@ -305,9 +305,9 @@ mod tests {
         now
     }
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async]
     async fn test_client_use_key() -> Result<()> {
         let mut builder = TlsClientBuilder::new();
         builder.stream = Some(Box::new(GetFdDumpImpl));
@@ -322,9 +322,9 @@ mod tests {
         Ok(())
     }
 
+    #[maybe_async]
     #[cfg_attr(feature = "is-sync", test)]
     #[cfg_attr(not(feature = "is-sync"), tokio::test)]
-    #[maybe_async]
     async fn test_client_use_cert() -> Result<()> {
         let mut builder = TlsClientBuilder::new();
         builder.stream = Some(Box::new(GetFdDumpImpl));
