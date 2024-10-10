@@ -74,13 +74,15 @@ impl SpdmRequesterBuilder {
         self
     }
 
-    pub fn build_with_tcp_stream(&self, stream: TcpStream) -> Result<SpdmRequester> {
+    #[maybe_async::maybe_async]
+    pub async fn build_with_tcp_stream(&self, stream: TcpStream) -> Result<SpdmRequester> {
         let (cert_provider, asym_signer, measurement_provider) = if cfg!(feature = "mut-auth")
             && self.attest_self
         {
             let attester = AutoAttester::new();
-            let cert_bundle =
-                CertBuilder::new(attester, HashAlgo::Sha256).build(AsymmetricAlgo::P256)?;
+            let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
+                .build(AsymmetricAlgo::P256)
+                .await?;
             (
                 Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
                     as Box<dyn CertProvider>,
@@ -382,7 +384,9 @@ pub mod tests {
                     )
                 } else {
                     let attester = AutoAttester::new();
-                    let cert_bundle = CertBuilder::new(attester, hash_algo).build(asym_algo)?;
+                    let cert_bundle = CertBuilder::new(attester, hash_algo)
+                        .build(asym_algo)
+                        .await?;
                     (
                         Box::new(RatsCertProvider::new_der(cert_bundle.cert_to_der()?))
                             as Box<dyn CertProvider>,

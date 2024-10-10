@@ -6,7 +6,6 @@ members = [
 ]
 default-members = [
     "rats-rs",
-    "examples/*",
 ]
 resolver = "2"
 

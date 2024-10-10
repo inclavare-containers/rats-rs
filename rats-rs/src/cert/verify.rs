@@ -219,8 +219,8 @@ fn extract_ext_with_oid<'a>(cert: &'a Certificate, oid: &ObjectIdentifier) -> Op
 #[cfg(test)]
 pub mod tests {
 
-    use indexmap::IndexMap;
-
+    #[allow(unused_imports)]
+    use super::*;
     use crate::{
         cert::create::CertBuilder,
         crypto::{AsymmetricAlgo, DefaultCrypto, HashAlgo},
@@ -230,12 +230,13 @@ pub mod tests {
             AutoAttester, TeeType,
         },
     };
+    use indexmap::IndexMap;
+    use maybe_async::maybe_async;
 
-    #[allow(unused_imports)]
-    use super::*;
-
-    #[test]
-    fn test_verify_cert_der() -> Result<()> {
+    #[maybe_async]
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    async fn test_verify_cert_der() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
             return Ok(());
@@ -249,7 +250,8 @@ pub mod tests {
         let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
+            .build(AsymmetricAlgo::P256)
+            .await?;
         let cert = cert_bundle.cert_to_der()?;
 
         let parsed_claims = verify_cert_der(&cert)?;
@@ -263,8 +265,10 @@ pub mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_verify_attestation_certificate() -> Result<()> {
+    #[maybe_async]
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    async fn test_verify_attestation_certificate() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
             return Ok(());
@@ -278,7 +282,8 @@ pub mod tests {
         let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
+            .build(AsymmetricAlgo::P256)
+            .await?;
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
@@ -303,8 +308,10 @@ pub mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_verify_attestation_certificate_with_claims_overriding() -> Result<()> {
+    #[maybe_async]
+    #[cfg_attr(feature = "is-sync", test)]
+    #[cfg_attr(not(feature = "is-sync"), tokio::test)]
+    async fn test_verify_attestation_certificate_with_claims_overriding() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
             return Ok(());
@@ -320,7 +327,8 @@ pub mod tests {
         let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
+            .build(AsymmetricAlgo::P256)
+            .await?;
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
