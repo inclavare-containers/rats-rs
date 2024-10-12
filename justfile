@@ -8,11 +8,11 @@ prepare-repo:
   cd deps/spdm-rs && sh_script/pre-build.sh
 
 run-in-occlum *args:
-  cargo build --bin spdm
+  cargo build -p spdm
   scripts/run_exe_in_occlum.sh target/debug/spdm {{args}}
 
 run-in-host *args:
-  cargo build --bin spdm
+  cargo build -p spdm
   target/debug/spdm {{args}}
 
 run-test-in-occlum *args:

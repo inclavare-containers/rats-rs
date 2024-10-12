@@ -37,6 +37,9 @@ pub struct Client {
     attest_self: bool,
 }
 
+// `Client` is not 'Send' because it contains raw pointer which doesn't impl `Send`
+// async methods capturing `&mut Client` need `Send` trait for `Client`, so we impl here.
+#[cfg(feature = "async-tokio")]
 unsafe impl Send for Client {}
 
 pub struct TlsClientBuilder {

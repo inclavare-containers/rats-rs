@@ -159,7 +159,7 @@ docker build --tag rats-rs:master .
 4. （可选）构建样例程序
 
     ```sh
-    cargo build --bin spdm
+    cargo build -p spdm
     ```
 
     对于如何运行样例程序，请参考examples目录下的[例子](/examples/spdm)。
