@@ -32,6 +32,9 @@ pub struct Server {
     stream: Box<dyn GetFd>,
 }
 
+// `Server` is not 'Send' because it contains raw pointer which doesn't impl `Send`
+// async methods capturing `&mut Server` need `Send` trait for `Server`, so we impl here.
+#[cfg(feature = "async-tokio")]
 unsafe impl Send for Server {}
 
 // TODO: use typestate design pattern?

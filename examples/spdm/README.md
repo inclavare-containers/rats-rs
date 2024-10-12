@@ -11,7 +11,7 @@
 
 接下来，使用如下命令构建本样例程序
 ```sh
-cargo build --bin spdm
+cargo build -p spdm
 ```
 
 可以使用`target/debug/spdm --help`命令查看该样例程序的命令行参数
