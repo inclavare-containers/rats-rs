@@ -151,7 +151,7 @@ docker build --tag rats-rs:builder --target builder .
 2. 准备
 
     ```sh
-    just prepare-repo
+    just prepare-repo-spdm
     ```
 
 3. 构建项目

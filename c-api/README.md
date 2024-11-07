@@ -17,7 +17,16 @@ TODO...
 
 这种方式需要先构建rats-rs并安装到系统中，然后在项目中链接到rats-rs。虽然更加繁琐，但更加灵活，且适用场景更广泛。
 
-1. 在rats-rs项目的根目录下执行cmake：
+1. clone代码
+
+    ```sh
+    git clone git@github.com:inclavare-containers/rats-rs.git
+    cd rats-rs
+
+    # c-api目前仅提供attester、verfiier相关api，无spdm相关功能，因此无需执行just prepare-repo-spdm    
+    ```
+
+2. 在rats-rs项目的根目录下执行cmake：
 
     ```sh
     cmake -Hc-api -Bbuild
@@ -26,7 +35,7 @@ TODO...
     ```
     这将创建一个build目录用于存放cmake的构建产物
 
-2. 编译并安装到系统路径中
+3. 编译并安装到系统路径中
 
     ```sh
     make -Cbuild install
@@ -37,7 +46,7 @@ TODO...
     - 库文件（.so和.a）：`/usr/local/lib/rats-rs/`
     - cmake搜索配置文件：`/usr/local/lib/cmake/RatsRs/`
 
-3. 在项目的CMakeLists.txt中引入
+4. 在项目的CMakeLists.txt中引入
 
     ```cmake
     # Find rats-rs in system

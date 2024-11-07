@@ -3,9 +3,18 @@ set shell := ["bash", "-uc"]
 default:
   just --list
 
-prepare-repo:
+prepare-repo-spdm:
   git submodule update --init --recursive
   cd deps/spdm-rs && sh_script/pre-build.sh
+
+
+install-c-api:
+  cmake -Hc-api -Bbuild
+  make -Cbuild install
+
+install-c-api-coco:
+  cmake -Hc-api -Bbuild -DCOCO_ONLY=ON
+  make -Cbuild install
 
 run-in-occlum *args:
   cargo build --bin spdm

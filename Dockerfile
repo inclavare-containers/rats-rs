@@ -67,7 +67,7 @@ WORKDIR /root/rats-rs
 COPY . .
 
 # build headers and librarys
-RUN just prepare-repo && \
+RUN just prepare-repo-spdm && \
     cmake -Hc-api -Bbuild && make -Cbuild install
 
 # build cert-app for testing
@@ -82,7 +82,7 @@ WORKDIR /root/rats-rs
 COPY . .
 
 # build headers and librarys (with CoCo attester and CoCo verifier only)
-RUN just prepare-repo && \
+RUN just prepare-repo-spdm && \
     cmake -Hc-api -Bbuild -DCOCO_ONLY=ON && make -Cbuild install
 
 # build cert-app for testing

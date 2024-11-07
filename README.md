@@ -43,8 +43,8 @@ rats-rs是一个纯Rust实现的TEE远程证明库，它的最终目标是让开
     ```sh
     git clone git@github.com:inclavare-containers/rats-rs.git
     cd rats-rs
-    
-    just prepare-repo
+
+    just prepare-repo-spdm
 
     cargo build --bin spdm
     ```
