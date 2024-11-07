@@ -154,16 +154,16 @@ docker build --tag rats-rs:builder --target builder .
     just prepare-repo-spdm
     ```
 
-3. 构建项目
+3. 构建项目（这将同时构建rats-cert和rats-transport）
 
     ```sh
-    cargo build
+    just build
     ```
 
 4. （可选）构建样例程序
 
     ```sh
-    cargo build --bin spdm
+    just build-example-spdm
     ```
 
     对于如何运行样例程序，请参考examples目录下的[例子](/examples/spdm)。

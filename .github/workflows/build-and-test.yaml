@@ -27,25 +27,25 @@ jobs:
 
       - name: Compile rats-rs (rust lib)
         run:
-          cargo build --package rats-rs
+          just build
         env:
           HOME: /root
 
       - name: Compile rats-rs (C API)
         run:
-          cmake -Hc-api -Bbuild && make -Cbuild all && make -Cbuild install
+          just build-c-api
         env:
           HOME: /root
 
       - name: Compile rats-rs (example/spdm)
         run:
-          cargo build --bin spdm
+          just build-example-spdm
         env:
           HOME: /root
 
       - name: Compile rats-rs (example/cert-app)
         run:
-          cd examples/cert-app && rm -rf build && cmake -H. -Bbuild && make -Cbuild all
+          just build-example-cert-app
         env:
           HOME: /root
 

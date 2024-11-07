@@ -1,7 +1,7 @@
 use super::io::FramedStream;
 use crate::errors::*;
-use crate::transport::GenericSecureTransPortRead;
-use crate::transport::GenericSecureTransPortWrite;
+use crate::GenericSecureTransPortRead;
+use crate::GenericSecureTransPortWrite;
 use log::debug;
 use log::warn;
 use maybe_async::maybe_async;

@@ -7,7 +7,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-rats-rs = {path = "../rats-rs", default-features = false, features = ["crypto-rustcrypto", "is-sync"]}
+rats-cert = {path = "../rats-cert", default-features = false, features = ["crypto-rustcrypto", "is-sync"]}
 zeroize = {workspace = true}
 ctor = "0.2.8"
 env_logger = {workspace = true}
@@ -20,8 +20,8 @@ shadow-rs = "=0.20.1"
 
 [features]
 default = ["local", "coco"]
-local = ["rats-rs/all-attesters", "rats-rs/all-verifiers"]
-coco = ["rats-rs/coco"]
+local = ["rats-cert/all-attesters", "rats-cert/all-verifiers"]
+coco = ["rats-cert/coco"]
 
 [lib]
 name = "rats_rs"

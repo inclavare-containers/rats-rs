@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use log::info;
-use rats_rs::transport::{
+use rats_transport::{
     spdm::{
         requester::{SpdmRequester, SpdmRequesterBuilder},
         responder::{SpdmResponder, SpdmResponderBuilder},

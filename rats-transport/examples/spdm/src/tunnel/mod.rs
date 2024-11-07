@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use log::{error, info};
-use rats_rs::transport::{GenericSecureTransPortRead, GenericSecureTransPortWrite};
+use rats_transport::{GenericSecureTransPortRead, GenericSecureTransPortWrite};
 
 const THREAD_STACK_SIZE: usize = 8 * 1024 * 1024;
 

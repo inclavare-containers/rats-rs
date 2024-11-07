@@ -19,18 +19,13 @@ use crate::crypto::AsymmetricAlgo;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
 use crate::tee::auto::AutoAttester;
-use crate::transport::GenericSecureTransPort;
-use crate::transport::GenericSecureTransPortRead;
-use crate::transport::GenericSecureTransPortWrite;
+use crate::GenericSecureTransPort;
 use codec::{Codec, Reader};
 use common::SpdmTransportEncap;
 use log::debug;
-use log::warn;
 use maybe_async::maybe_async;
 use spdmlib::common;
 use spdmlib::common::SecuredMessageVersion;
-use spdmlib::common::SpdmContext;
-use spdmlib::common::SpdmDeviceIo;
 use spdmlib::common::SpdmOpaqueSupport;
 use spdmlib::config;
 use spdmlib::crypto::cert_operation::CertValidationStrategy;
@@ -42,10 +37,7 @@ use spdmlib::secret::asym_sign::DefaultSecretAsymSigner;
 use spdmlib::secret::asym_sign::SecretAsymSigner;
 use spdmlib::secret::measurement::MeasurementProvider;
 use spin::Mutex;
-use std::io::Read;
-use std::io::Write;
 use std::net::TcpStream;
-use std::ops::DerefMut;
 use std::sync::Arc;
 
 pub struct SpdmRequesterBuilder {
@@ -340,25 +332,12 @@ impl GenericSecureTransPort for SpdmRequester {
 #[cfg(test)]
 pub mod tests {
 
-    use spdmlib::{
-        crypto::cert_operation::DefaultCertValidationStrategy,
-        secret::asym_sign::DefaultSecretAsymSigner,
-    };
-
-    use crate::{
-        cert::create::CertBuilder,
-        crypto::{AsymmetricAlgo, HashAlgo},
-        transport::spdm::secret::{
-            asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
-            cert_provider::{tests::DummyCertProvider, EmptyCertProvider, RatsCertProvider},
-            cert_validation::{
-                tests::DummyValidationContext, EmptyValidationContext, RatsCertValidationStrategy,
-            },
-        },
-    };
+    use crate::{spdm::secret::{
+        asym_crypto::tests::DummySecretAsymSigner, cert_provider::tests::DummyCertProvider,
+        cert_validation::tests::DummyValidationContext,
+    }, GenericSecureTransPortRead, GenericSecureTransPortWrite};
 
     use super::*;
-    use std::net::TcpStream;
 
     #[maybe_async::maybe_async]
     pub async fn run_requester(

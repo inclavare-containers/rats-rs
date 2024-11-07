@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 use crate::cert::dice::cbor::generate_claims_buffer;
-use crate::errors::*;
+use rats_cert::errors::*;
 use crate::tee::GenericEvidence;
 use codec::u24;
 use codec::Codec;

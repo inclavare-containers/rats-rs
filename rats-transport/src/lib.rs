@@ -1,8 +1,11 @@
 #[cfg(feature = "transport-spdm")]
 pub mod spdm;
 
-use crate::errors::*;
 use maybe_async::maybe_async;
+pub use rats_cert::cert;
+pub use rats_cert::crypto;
+pub use rats_cert::errors::{self, *};
+pub use rats_cert::tee;
 
 #[maybe_async]
 pub trait GenericSecureTransPort {

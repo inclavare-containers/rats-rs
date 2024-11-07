@@ -131,9 +131,8 @@ impl SecretAsymSigner for RatsSecretAsymSigner {
 pub mod tests {
     use super::*;
     use spdmlib::protocol::{
-        SpdmBaseAsymAlgo, SpdmBaseHashAlgo, SpdmSignatureStruct, RSAPSS_2048_KEY_SIZE,
-        RSAPSS_3072_KEY_SIZE, RSAPSS_4096_KEY_SIZE, RSASSA_2048_KEY_SIZE, RSASSA_3072_KEY_SIZE,
-        RSASSA_4096_KEY_SIZE, SPDM_MAX_ASYM_KEY_SIZE,
+        RSAPSS_2048_KEY_SIZE, RSAPSS_3072_KEY_SIZE, RSAPSS_4096_KEY_SIZE, RSASSA_2048_KEY_SIZE,
+        RSASSA_3072_KEY_SIZE, RSASSA_4096_KEY_SIZE, SPDM_MAX_ASYM_KEY_SIZE,
     };
 
     pub struct DummySecretAsymSigner {}
@@ -239,9 +238,9 @@ pub mod tests {
         // openssl.exe pkcs8 -in private.der -inform DER -topk8 -nocrypt -outform DER > private.p8
 
         let key_bytes = if algorithm == &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING {
-            &include_bytes!("../../../../../deps/spdm-rs/test_key/ecp256/end_responder.key.p8")[..]
+            &include_bytes!("../../../../deps/spdm-rs/test_key/ecp256/end_responder.key.p8")[..]
         } else if algorithm == &ring::signature::ECDSA_P384_SHA384_FIXED_SIGNING {
-            &include_bytes!("../../../../../deps/spdm-rs/test_key/ecp384/end_responder.key.p8")[..]
+            &include_bytes!("../../../../deps/spdm-rs/test_key/ecp384/end_responder.key.p8")[..]
         } else {
             panic!("not support")
         };
@@ -273,13 +272,13 @@ pub mod tests {
         #[allow(unreachable_patterns)]
         let key_bytes = match key_len {
             RSASSA_2048_KEY_SIZE | RSAPSS_2048_KEY_SIZE => {
-                &include_bytes!("../../../../../deps/spdm-rs/test_key/rsa2048/end_responder.key.der")[..]
+                &include_bytes!("../../../../deps/spdm-rs/test_key/rsa2048/end_responder.key.der")[..]
             }
             RSASSA_3072_KEY_SIZE | RSAPSS_3072_KEY_SIZE => {
-                &include_bytes!("../../../../../deps/spdm-rs/test_key/rsa3072/end_responder.key.der")[..]
+                &include_bytes!("../../../../deps/spdm-rs/test_key/rsa3072/end_responder.key.der")[..]
             }
             RSASSA_4096_KEY_SIZE | RSAPSS_4096_KEY_SIZE => {
-                &include_bytes!("../../../../../deps/spdm-rs/test_key/rsa3072/end_responder.key.der")[..]
+                &include_bytes!("../../../../deps/spdm-rs/test_key/rsa3072/end_responder.key.der")[..]
             }
             _ => {
                 panic!("RSA key len not supported")

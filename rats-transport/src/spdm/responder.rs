@@ -8,16 +8,13 @@ use super::secret::measurement::{EmptyMeasurementProvider, RatsMeasurementProvid
 use super::VerifyMode;
 use codec::Codec;
 use common::SpdmTransportEncap;
-use log::{debug, warn};
 use maybe_async::maybe_async;
 use spdmlib::common::session::SpdmSessionState;
 use spdmlib::common::{SecuredMessageVersion, SpdmOpaqueSupport};
 use spdmlib::crypto::cert_operation::{CertValidationStrategy, DefaultCertValidationStrategy};
 use spdmlib::secret::asym_sign::{DefaultSecretAsymSigner, SecretAsymSigner};
 use spdmlib::secret::measurement::MeasurementProvider;
-use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::ops::DerefMut;
 // TODO: secret_impl_sample for measurements
 // use spdm_emu::{secret_impl_sample::*, EMU_STACK_SIZE};
 use spdmlib::{
@@ -30,12 +27,11 @@ extern crate alloc;
 use crate::cert::create::CertBuilder;
 use crate::crypto::{AsymmetricAlgo, HashAlgo};
 use crate::errors::*;
+use crate::spdm::io::FramedStream;
+use crate::spdm::transport::SimpleTransportEncap;
 use crate::tee::auto::AutoAttester;
-use crate::transport::spdm::io::FramedStream;
-use crate::transport::spdm::transport::SimpleTransportEncap;
-use crate::transport::GenericSecureTransPort;
+use crate::GenericSecureTransPort;
 use alloc::sync::Arc;
-use spdmlib::common::SpdmDeviceIo;
 
 pub struct SpdmResponderBuilder {
     verify_mode: VerifyMode,
@@ -309,31 +305,20 @@ impl GenericSecureTransPort for SpdmResponder {
 #[cfg(test)]
 pub mod tests {
 
-    use itertools::iproduct;
     use log::LevelFilter;
-    use spdmlib::crypto::cert_operation::DefaultCertValidationStrategy;
 
     use crate::{
-        cert::create::CertBuilder,
-        crypto::{AsymmetricAlgo, HashAlgo},
-        tee::TeeType,
-        transport::{
-            spdm::secret::{
-                asym_crypto::{tests::DummySecretAsymSigner, RatsSecretAsymSigner},
-                cert_provider::{tests::DummyCertProvider, RatsCertProvider},
-                cert_validation::{
-                    tests::DummyValidationContext, EmptyValidationContext,
-                    RatsCertValidationStrategy,
-                },
-                measurement::EmptyMeasurementProvider,
-            },
-            GenericSecureTransPortRead, GenericSecureTransPortWrite,
+        spdm::secret::{
+            asym_crypto::tests::DummySecretAsymSigner, cert_provider::tests::DummyCertProvider,
+            cert_validation::tests::DummyValidationContext,
         },
+        tee::TeeType,
+        GenericSecureTransPortRead, GenericSecureTransPortWrite,
     };
 
     use super::super::requester::tests::run_requester;
     use super::*;
-    use std::net::{TcpListener, TcpStream};
+    use std::net::TcpListener;
 
     #[maybe_async::maybe_async]
     pub async fn run_responder(

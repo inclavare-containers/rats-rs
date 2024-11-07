@@ -9,17 +9,17 @@ fn main() ->shadow_rs::SdResult<()> {
 
     cbindgen::Builder::new()
         .with_crate(&cur_crate_dir)
-        .with_src(format!("{cur_crate_dir}/../rats-rs/src/crypto/mod.rs"))
-        .with_src(format!("{cur_crate_dir}/../rats-rs/src/errors.rs"))
-        .with_src(format!("{cur_crate_dir}/../rats-rs/src/cert/verify.rs"))
+        .with_src(format!("{cur_crate_dir}/../rats-cert/src/crypto/mod.rs"))
+        .with_src(format!("{cur_crate_dir}/../rats-cert/src/errors.rs"))
+        .with_src(format!("{cur_crate_dir}/../rats-cert/src/cert/verify.rs"))
         // TODO: add supporting for generating claims name definition automatically after [this issue](https://github.com/mozilla/cbindgen/issues/927) is solved
-        // .with_src(format!("{cur_crate_dir}/../rats-rs/src/tee/sgx_dcap/claims.rs"))
-        // .with_src(format!("{cur_crate_dir}/../rats-rs/src/tee/tdx/claims.rs"))
-        // .with_src(format!("{cur_crate_dir}/../rats-rs/src/tee/claims.rs"))
+        // .with_src(format!("{cur_crate_dir}/../rats-cert/src/tee/sgx_dcap/claims.rs"))
+        // .with_src(format!("{cur_crate_dir}/../rats-cert/src/tee/tdx/claims.rs"))
+        // .with_src(format!("{cur_crate_dir}/../rats-cert/src/tee/claims.rs"))
         .with_config(config)
         .generate()
         .expect("Unable to generate bindings")
-        .write_to_file("include/rats-rs.h");
+        .write_to_file("include/rats-cert.h");
 
         shadow_rs::new()
 

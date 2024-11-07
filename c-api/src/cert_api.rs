@@ -1,14 +1,14 @@
-use rats_rs::cert::create::CertBuilder;
-use rats_rs::cert::verify::{
+use rats_cert::cert::create::CertBuilder;
+use rats_cert::cert::verify::{
     CertVerifier, ClaimsCheck as RatsRsClaimsCheck, CocoVerifyMode as RatsRsCocoVerifyMode,
     VerifyPolicy as RatsRsVerifyPolicy, VerifyPolicyOutput,
 };
-use rats_rs::crypto::{AsymmetricAlgo, AsymmetricPrivateKey, HashAlgo};
-use rats_rs::errors::*;
-use rats_rs::tee::claims::Claims;
-use rats_rs::tee::coco::attester::CocoAttester;
-use rats_rs::tee::coco::converter::CocoConverter;
-use rats_rs::tee::AttesterPipeline;
+use rats_cert::crypto::{AsymmetricAlgo, AsymmetricPrivateKey, HashAlgo};
+use rats_cert::errors::*;
+use rats_cert::tee::claims::Claims;
+use rats_cert::tee::coco::attester::CocoAttester;
+use rats_cert::tee::coco::converter::CocoConverter;
+use rats_cert::tee::AttesterPipeline;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::ffi::{c_char, c_void};
@@ -150,15 +150,15 @@ fn rats_rs_create_cert_internal(
 
             match r#type {
                 LocalAttesterType::Auto => {
-                    use rats_rs::tee::auto::AutoAttester;
+                    use rats_cert::tee::auto::AutoAttester;
                     attester_dispatch!(AutoAttester::new())
                 }
                 LocalAttesterType::SgxDcap => {
-                    use rats_rs::tee::sgx_dcap::attester::SgxDcapAttester;
+                    use rats_cert::tee::sgx_dcap::attester::SgxDcapAttester;
                     attester_dispatch!(SgxDcapAttester::new())
                 }
                 LocalAttesterType::Tdx => {
-                    use rats_rs::tee::tdx::attester::TdxAttester;
+                    use rats_cert::tee::tdx::attester::TdxAttester;
                     attester_dispatch!(TdxAttester::new())
                 }
             }

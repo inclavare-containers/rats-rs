@@ -1,0 +1,84 @@
+[package]
+authors = ["Kun Lai <me@imlk.top>"]
+edition.workspace = true
+license.workspace = true
+name = "rats-cert"
+version.workspace = true
+
+[dependencies]
+anyhow = {workspace = true}
+async-trait = "0.1.77"
+base64 = "0.22.1"
+bitflags = "2.5.0"
+bstr = "1.9.1"
+bytes = "1.5.0"
+ciborium = "0.2.2"
+const-oid = {version = "0.9.6", optional = true}
+flatten-json-object = {version = "0.6.1", optional = true}
+hex = "0.4.3"
+indexmap = {version = "2.2.6", features = ["std", "serde"]}
+intel-dcap = {path = "../intel-dcap", optional = true}
+intel-tee-quote-verification-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
+itertools = "0.12.1"
+log = {workspace = true}
+maybe-async = "0.2.7"
+occlum_dcap = {git = "https://github.com/occlum/occlum", tag = "v0.29.7", optional = true}
+p256 = {version = "0.13.2", optional = true}
+pkcs8 = {version = "0.10.2", features = ["pem"], optional = true}
+prost = {version = "0.11.0", optional = true}
+protobuf = {version = "~3.4.0", optional = true}
+rand = "0.8.5"
+reqwest = {version = "0.11", features = ["json", "blocking", "rustls-tls"], default-features = false, optional = true}
+ring = {workspace = true, optional = true}
+rsa = {version = "0.9.6", features = ["sha2"], optional = true}
+serde = {version = "1.0", features = ["derive"]}
+serde_bytes = "0.11.14"
+serde_json = "1.0.117"
+sha2 = {version = "0.10.8", features = ["oid"], optional = true}
+signature = {version = "2.2.0", optional = true}
+spin = {workspace = true}
+strum = "0.26.2"
+strum_macros = "0.26.2"
+tdx-attest-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
+thiserror = "1.0.56"
+time = {version = "0.3.23", features = ["std"]}
+tokio = {version = "1.36.0", features = ["full"], optional = true}
+tonic = {version = "0.8.1", optional = true}
+ttrpc = {version = "0.8.0", optional = true}
+webpki = {version = "0.22.4", optional = true, features = ["alloc", "std"]}
+x509-cert = {version = "0.2.5", features = ["builder"], optional = true}
+zeroize = {workspace = true}
+
+[features]
+all-attesters = ["attester-sgx-dcap-occlum", "attester-tdx"]
+all-verifiers = ["verifier-sgx-dcap", "verifier-tdx"]
+async-tokio = ["dep:tokio"]
+attester-sgx-dcap = ["dep:intel-dcap"]
+attester-sgx-dcap-enclave = [] # TODO: plain enclave mode
+attester-sgx-dcap-occlum = ["attester-sgx-dcap", "dep:occlum_dcap"]
+attester-tdx = ["dep:tdx-attest-rs", "dep:intel-dcap"]
+coco = [
+  "dep:ttrpc-codegen",
+  "dep:ttrpc",
+  "dep:protobuf",
+  "dep:tonic-build",
+  "dep:tonic",
+  "dep:prost",
+  "dep:tokio",
+  "dep:webpki",
+  "dep:reqwest",
+  "dep:flatten-json-object",
+]
+crypto-rustcrypto = ["dep:x509-cert", "dep:sha2", "dep:p256", "dep:rsa", "dep:pkcs8", "dep:const-oid", "dep:signature"]
+default = ["crypto-rustcrypto", "all-attesters", "all-verifiers", "is-sync", "coco"]
+is-sync = ["maybe-async/is_sync"]
+verifier-sgx-dcap = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
+verifier-tdx = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
+
+[dev-dependencies]
+env_logger = {workspace = true}
+rayon = "1.10.0"
+
+[build-dependencies]
+tonic-build = {version = "0.8.0", optional = true}
+ttrpc-codegen = {version = "0.4.2", optional = true}

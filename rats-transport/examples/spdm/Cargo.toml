@@ -1,0 +1,16 @@
+[package]
+authors = ["Kun Lai <me@imlk.top>"]
+edition = "2021"
+license = "Apache-2.0"
+name = "spdm"
+publish = false
+version = "0.1.0"
+
+[dependencies]
+anyhow = "1.0.81"
+clap = {version = "4.5.4", features = ["derive"]}
+env_logger = {version = "0.11.2", features = ["auto-color", "humantime", "regex"]}
+log = "0.4.20"
+rand = {version = "0.8.5", features = ["small_rng"]}
+rats-cert = {path = "../../../rats-cert", features = ["is-sync"]}
+rats-transport = {path = "../../", features = ["is-sync"]}

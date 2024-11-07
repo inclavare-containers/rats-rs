@@ -1,7 +1,7 @@
 use std::ffi::c_char;
 
-use rats_rs::crypto::AsymmetricAlgo;
-use rats_rs::crypto::HashAlgo;
+use rats_cert::crypto::AsymmetricAlgo;
+use rats_cert::crypto::HashAlgo;
 
 #[allow(non_camel_case_types)]
 pub type hash_algo_t = HashAlgo;

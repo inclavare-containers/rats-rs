@@ -45,8 +45,6 @@ rats-rs是一个纯Rust实现的TEE远程证明库，它的最终目标是让开
     cd rats-rs
 
     just prepare-repo-spdm
-
-    cargo build --bin spdm
     ```
 
 3. 运行Server端程序

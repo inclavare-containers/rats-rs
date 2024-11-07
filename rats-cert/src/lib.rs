@@ -8,7 +8,6 @@ pub mod cert;
 pub mod crypto;
 pub mod errors;
 pub mod tee;
-pub mod transport;
 
 #[cfg(all(feature = "is-sync", feature = "async-tokio"))]
 compile_error!("features `is-sync` and `async-tokio` are mutually exclusive");

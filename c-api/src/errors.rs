@@ -1,6 +1,6 @@
 use std::ffi::c_char;
 
-use rats_rs::errors::{Error, ErrorKind};
+use rats_cert::errors::{Error, ErrorKind};
 
 #[allow(non_camel_case_types)]
 pub type error_kind_t = ErrorKind;
