@@ -1,6 +1,7 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 
+use super::evidence::AaTeeType;
 use super::ttrpc_protocol::attestation_agent::{GetEvidenceRequest, GetTeeTypeRequest};
 use super::TTRPC_DEFAULT_TIMEOUT_NANO;
 use super::{
@@ -70,12 +71,7 @@ impl GenericAttester for CocoAttester {
                 &get_tee_type_req,
             )
             .kind(ErrorKind::CocoRequestAAFailed)?;
-        let tee_type = TeeType::from_id_str(&get_tee_type_res.tee).with_context(|| {
-            format!(
-                "Got unrecognized tee type `{}` from attestation-agent",
-                &get_tee_type_res.tee
-            )
-        })?;
+        let tee_type = AaTeeType::from_attestation_agent_str_id(&get_tee_type_res.tee);
 
         Ok(CocoEvidence::new(
             tee_type,

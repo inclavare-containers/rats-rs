@@ -11,7 +11,6 @@ use self::as_api::attestation_service_client::AttestationServiceClient;
 use self::as_api::AttestationRequest;
 use self::as_api::AttestationResponse;
 use super::super::evidence::{CocoAsToken, CocoEvidence};
-use super::AttestationAgentTeeType;
 use super::AttestationServiceHashAlgo;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
@@ -63,8 +62,9 @@ impl GenericConverter for CocoGrpcConverter {
             AttestationServiceHashAlgo::from(in_evidence.get_aa_runtime_data_hash_algo()).str_id();
 
         let request = tonic::Request::new(AttestationRequest {
-            tee: Into::<AttestationAgentTeeType>::into(in_evidence.get_tee_type())
-                .str_id()
+            tee: in_evidence
+                .get_tee_type()
+                .as_attestation_service_str_id()
                 .to_owned(),
             evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
             init_data: None, // TODO: add support for init_data when support on AA is ready

@@ -11,7 +11,6 @@ use serde_json::Value;
 use tokio::runtime::Runtime;
 
 use super::super::evidence::{CocoAsToken, CocoEvidence};
-use super::AttestationAgentTeeType;
 use super::AttestationServiceHashAlgo;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
@@ -76,8 +75,9 @@ impl GenericConverter for CocoRestfulConverter {
             .client
             .post(format!("{}/attestation", self.as_addr))
             .json(&AttestationRequest {
-                tee: Into::<AttestationAgentTeeType>::into(in_evidence.get_tee_type())
-                    .str_id()
+                tee: in_evidence
+                    .get_tee_type()
+                    .as_attestation_service_str_id()
                     .to_owned(),
                 evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
                 init_data: None, // TODO: add support for init_data when support on AA is ready

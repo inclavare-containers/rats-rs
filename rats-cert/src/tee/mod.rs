@@ -131,25 +131,4 @@ impl TeeType {
         }
         return None;
     }
-
-    pub fn id_str(&self) -> &'static str {
-        match self {
-            TeeType::Sample => "sample",
-            TeeType::SgxDcap => "sgx-dcap",
-            TeeType::Tdx => "tdx",
-            TeeType::Csv => "csv",
-        }
-    }
-
-    pub fn from_id_str(id_str: &str) -> Result<Self> {
-        for tee_type in TeeType::iter() {
-            if tee_type.id_str().eq(id_str) {
-                return Ok(tee_type);
-            }
-        }
-        return Err(Error::kind_with_msg(
-            ErrorKind::UnsupportedTeeType,
-            format!("Unknown tee type id_str `{id_str}`"),
-        ));
-    }
 }
