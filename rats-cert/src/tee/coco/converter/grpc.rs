@@ -80,6 +80,7 @@ impl GenericConverter for CocoGrpcConverter {
         let response: AttestationResponse = self
             .tokio_rt
             .block_on(client.attestation_evaluate(request))
+            .map_err(IntoRatsError::into_rats_error)
             .context("Call attestation_evaluate() on grpc-as failed")?
             .into_inner();
 

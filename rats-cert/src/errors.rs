@@ -149,24 +149,28 @@ impl Error {
 
 // TODO: replace this with `impl<E: std::error::Error> From<E> for Error`，so that we can record source of our Error
 impl<E: Display> From<E> for Error {
-    default fn from(error: E) -> Error {
+    fn from(error: E) -> Error {
         Error::kind_with_msg(ErrorKind::Unknown, error)
     }
 }
 
+pub trait IntoRatsError {
+    fn into_rats_error(self) -> Error;
+}
+
 #[cfg(feature = "transport-spdm")]
-impl From<spdmlib::error::SpdmStatus> for Error {
-    fn from(value: spdmlib::error::SpdmStatus) -> Self {
-        Error::kind_with_msg(ErrorKind::Unknown, format!("{:?}", value))
+impl IntoRatsError for spdmlib::error::SpdmStatus {
+    fn into_rats_error(self) -> Error {
+        Error::kind_with_msg(ErrorKind::Unknown, format!("{:?}", self))
     }
 }
 
 #[cfg(feature = "coco")]
-impl From<tonic::Status> for Error {
-    fn from(value: tonic::Status) -> Self {
+impl IntoRatsError for tonic::Status {
+    fn into_rats_error(self) -> Error {
         Error::kind_with_msg(
             ErrorKind::Unknown,
-            format!("tonic status: {:?} msg: {}", value.code(), value.message()),
+            format!("tonic status: {:?} msg: {}", self.code(), self.message()),
         )
     }
 }
@@ -189,19 +193,26 @@ impl<T, E> WithContext<T> for std::result::Result<T, E>
 where
     Error: From<E>,
 {
-    default fn kind(self, kind: ErrorKind) -> Result<T> {
+    fn kind(self, kind: ErrorKind) -> Result<T> {
         self.map_err(|error| Into::<Error>::into(error).with_kind(kind))
     }
 
-    default fn context<C>(self, context: C) -> Result<T>
+    fn context<C>(self, context: C) -> Result<T>
     where
         C: Display,
     {
         self.map_err(|error| Into::<Error>::into(error))
-            .context(context)
+            .map_err(|error| {
+                if let Some(ref msg) = error.msg {
+                    let new_msg = format!("{}: {}", context, msg);
+                    error.with_msg(new_msg)
+                } else {
+                    error.with_msg(context)
+                }
+            })
     }
 
-    default fn with_context<C, F>(self, f: F) -> Result<T>
+    fn with_context<C, F>(self, f: F) -> Result<T>
     where
         C: Display,
         F: FnOnce() -> C,
@@ -210,23 +221,6 @@ where
             Ok(t) => Ok(t),
             Err(e) => Err(e).context(f()),
         }
-    }
-}
-
-#[allow(dead_code)]
-impl<T> WithContext<T> for std::result::Result<T, Error> {
-    fn context<C>(self, context: C) -> Result<T>
-    where
-        C: Display,
-    {
-        self.map_err(|error| {
-            if let Some(ref msg) = error.msg {
-                let new_msg = format!("{}: {}", context, msg);
-                error.with_msg(new_msg)
-            } else {
-                error.with_msg(context)
-            }
-        })
     }
 }
 

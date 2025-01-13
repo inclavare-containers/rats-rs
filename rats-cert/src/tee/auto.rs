@@ -1,10 +1,12 @@
 use std::any::Any;
 
+use as_any::{AsAny, Downcast};
+
 use super::{claims::Claims, DiceParseEvidenceOutput, GenericAttester, GenericEvidence, GenericVerifier, TeeType};
 use crate::errors::*;
 
 
-pub trait LocalEvidence: GenericEvidence {
+pub trait LocalEvidence: AsAny + GenericEvidence {
     /// Return the type of Trusted Execution Environment (TEE) associated with the evidence.
     fn get_tee_type(&self) -> TeeType;
 }
@@ -138,8 +140,6 @@ impl GenericVerifier for AutoVerifier {
     ) -> Result<()> {
         #[allow(unused)]
         let tee_type = evidence.0.get_tee_type();
-        #[allow(unused)]
-        let evidence = evidence.0.as_ref() as &dyn Any;
         match tee_type {
             #[cfg(feature = "verifier-sgx-dcap")]
             TeeType::SgxDcap => {

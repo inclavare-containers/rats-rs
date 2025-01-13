@@ -7,6 +7,7 @@ version.workspace = true
 
 [dependencies]
 anyhow = {workspace = true}
+as-any = "0.3.1"
 async-trait = "0.1.77"
 base64 = "0.22.1"
 bitflags = "2.5.0"
