@@ -9,13 +9,13 @@ license.workspace = true
 [dependencies]
 rats-cert = {path = "../rats-cert", default-features = false, features = ["crypto-rustcrypto", "is-sync"]}
 zeroize = {workspace = true}
-ctor = "0.2.8"
+ctor = "0.2.9"
 env_logger = {workspace = true}
 log = {workspace = true}
 shadow-rs = "=0.20.1"
 
 [build-dependencies]
-cbindgen = "0.24.0"
+cbindgen = "0.28.0"
 shadow-rs = "=0.20.1"
 
 [features]

@@ -435,7 +435,7 @@ rats_rs_error_obj_t *rats_rs_verify_cert(const uint8_t *certificate,
                                          rats_rs_verify_policy_output_t *verify_policy_output_out);
 
 #ifdef __cplusplus
-} // extern "C"
-#endif // __cplusplus
+}  // extern "C"
+#endif  // __cplusplus
 
-#endif /* _RATS_H_ */
+#endif  /* _RATS_H_ */

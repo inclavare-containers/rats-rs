@@ -20,9 +20,9 @@ readme = "README.md"
 version = "0.1.0"
 
 [workspace.dependencies]
-anyhow = "1.0.81"
-env_logger = {version = "0.11.2", features = ["auto-color", "humantime", "regex"]}
-log = "0.4.20"
-ring = "0.17.6"
+anyhow = "1.0.95"
+env_logger = {version = "0.11.6", features = ["auto-color", "humantime", "regex"]}
+log = "0.4.25"
+ring = "0.17.8"
 spin = "0.9.8"
-zeroize = "1.7.0"
+zeroize = "1.8.1"
