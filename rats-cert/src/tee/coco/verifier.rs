@@ -128,7 +128,7 @@ impl CocoVerifier {
         }
 
         /* Check signature of JWT */
-        let jwk_value = claims_value["jwk"].as_object().ok_or_else(|| Error::msg(
+        let jwk_value = header_value["jwk"].as_object().or_else(|| claims_value["jwk"].as_object()).ok_or_else(|| Error::msg(
             "CoCo Attestation Token Claims must contain public key (JWK format) to verify signature",
         ))?;
         let jwk = serde_json::to_string(&jwk_value)?;
