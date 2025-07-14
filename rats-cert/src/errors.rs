@@ -165,7 +165,7 @@ impl IntoRatsError for spdmlib::error::SpdmStatus {
     }
 }
 
-#[cfg(feature = "coco")]
+#[cfg(feature = "verifier-coco")]
 impl IntoRatsError for tonic::Status {
     fn into_rats_error(self) -> Error {
         Error::kind_with_msg(

@@ -1,6 +1,6 @@
 use std::env;
 
-fn main() ->shadow_rs::SdResult<()> {
+fn main() -> shadow_rs::SdResult<()> {
     /* Generate header files with cbindgen */
     let cur_crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let config_file = format!("{cur_crate_dir}/cbindgen.toml");
@@ -21,6 +21,5 @@ fn main() ->shadow_rs::SdResult<()> {
         .expect("Unable to generate bindings")
         .write_to_file("include/rats-cert.h");
 
-        shadow_rs::new()
-
+    shadow_rs::new()
 }

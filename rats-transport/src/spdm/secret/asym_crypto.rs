@@ -1,4 +1,3 @@
-use log::{error, trace};
 use rsa::signature::{RandomizedSigner, SignatureEncoding};
 use spdmlib::secret::asym_sign::SecretAsymSigner;
 
@@ -52,7 +51,7 @@ impl SecretAsymSigner for RatsSecretAsymSigner {
         base_asym_algo: SpdmBaseAsymAlgo,
         data: &[u8],
     ) -> Option<SpdmSignatureStruct> {
-        trace!("sign data with {base_hash_algo:?} and {base_asym_algo:?}");
+        tracing::trace!("sign data with {base_hash_algo:?} and {base_asym_algo:?}");
 
         let digest = match (&self.private_key, base_asym_algo) {
             (AsymmetricPrivateKey::Rsa2048(key), SpdmBaseAsymAlgo::TPM_ALG_RSAPSS_2048)
@@ -101,7 +100,7 @@ impl SecretAsymSigner for RatsSecretAsymSigner {
             }
             (AsymmetricPrivateKey::P256(key), SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P256) => {
                 if base_hash_algo != SpdmBaseHashAlgo::TPM_ALG_SHA_256 {
-                    error!(
+                    tracing::error!(
                         "unsupported operation, {:?} only works with {:?}, but got {:?}",
                         SpdmBaseAsymAlgo::TPM_ALG_ECDSA_ECC_NIST_P256,
                         SpdmBaseHashAlgo::TPM_ALG_SHA_256,

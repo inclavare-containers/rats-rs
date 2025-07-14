@@ -15,7 +15,7 @@ pub mod sgx_dcap;
 #[cfg(any(feature = "attester-tdx", feature = "verifier-tdx"))]
 pub mod tdx;
 
-#[cfg(any(feature = "coco"))]
+#[cfg(any(feature = "attester-coco", feature = "verifier-coco"))]
 pub mod coco;
 
 pub enum DiceParseEvidenceOutput<T> {
@@ -40,7 +40,7 @@ impl<T> From<DiceParseEvidenceOutput<T>> for Result<T> {
 }
 
 /// Trait representing generic evidence.
-pub trait GenericEvidence: Any {
+pub trait GenericEvidence: Any + Send {
     /// Return the CBOR tag used for generating DICE cert.
     fn get_dice_cbor_tag(&self) -> u64;
 
@@ -60,26 +60,29 @@ pub trait GenericEvidence: Any {
 }
 
 /// Trait representing a generic attester.
+#[async_trait::async_trait]
 pub trait GenericAttester {
     type Evidence: GenericEvidence;
 
     /// Generate evidence based on the provided report data.
-    fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence>;
+    async fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence>;
 }
 
 /// Trait representing a generic verifier.
+#[async_trait::async_trait]
 pub trait GenericVerifier {
     type Evidence: GenericEvidence;
 
     /// Verify the provided evidence with the Trust Anchor and checking the report data matches the one in the evidence.
-    fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()>;
+    async fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()>;
 }
 
+#[async_trait::async_trait]
 pub trait GenericConverter {
     type InEvidence: GenericEvidence;
     type OutEvidence: GenericEvidence;
 
-    fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence>;
+    async fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence>;
 }
 
 pub struct AttesterPipeline<A: GenericAttester, C: GenericConverter<InEvidence = A::Evidence>> {
@@ -96,14 +99,17 @@ impl<A: GenericAttester, C: GenericConverter<InEvidence = A::Evidence>> Attester
     }
 }
 
-impl<A: GenericAttester, C: GenericConverter<InEvidence = A::Evidence>> GenericAttester
-    for AttesterPipeline<A, C>
+#[async_trait::async_trait]
+impl<A, C> GenericAttester for AttesterPipeline<A, C>
+where
+    A: GenericAttester + Sync,
+    C: GenericConverter<InEvidence = A::Evidence> + Sync,
 {
     type Evidence = C::OutEvidence;
 
-    fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
-        let evidence = self.attester.get_evidence(report_data)?;
-        self.converter.convert(&evidence)
+    async fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
+        let evidence = self.attester.get_evidence(report_data).await?;
+        self.converter.convert(&evidence).await
     }
 }
 

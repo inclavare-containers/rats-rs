@@ -1,3 +1,6 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use super::dice::cbor::{
     parse_claims_buffer, parse_evidence_buffer_with_tag, parse_pubkey_hash_value_buffer,
 };
@@ -16,7 +19,6 @@ use crate::tee::{claims::Claims, GenericEvidence, GenericVerifier};
 use bstr::ByteSlice;
 use const_oid::ObjectIdentifier;
 use itertools::Itertools;
-use log::{debug, error, log_enabled, warn, Level::Debug};
 use pkcs8::der::referenced::OwnedToRef;
 use pkcs8::der::{Decode, DecodePem, Encode};
 use pkcs8::spki::AlgorithmIdentifierOwned;
@@ -56,7 +58,13 @@ pub enum ClaimsCheck {
     /// Verifies if the certificate contains a specific set of claims.
     Contains(Claims),
     /// Enables the use of a custom verification function, providing flexibility for specialized validation logic.
-    Custom(Box<dyn Fn(&Claims) -> VerifyPolicyOutput>),
+    Custom(
+        Box<
+            dyn (Fn(&Claims) -> Pin<Box<dyn Future<Output = VerifyPolicyOutput> + Send>>)
+                + Send
+                + Sync,
+        >,
+    ),
 }
 
 /// Represents the outcome of a certificate verification.
@@ -80,23 +88,23 @@ impl CertVerifier {
         Self { policy }
     }
 
-    pub fn verify_pem(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
+    pub async fn verify_pem(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
         let cert = Certificate::from_pem(cert)
             .kind(ErrorKind::ParseCertError)
             .context("failed to parse certificate from pem")?;
-        let claims = self.verify_cert(&cert)?;
-        self.check_claims(&claims)
+        let claims = self.verify_cert(&cert).await?;
+        self.check_claims(&claims).await
     }
 
-    pub fn verify_der(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
+    pub async fn verify_der(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
         let cert = Certificate::from_der(cert)
             .kind(ErrorKind::ParseCertError)
             .context("failed to parse certificate from der")?;
-        let claims = self.verify_cert(&cert)?;
-        self.check_claims(&claims)
+        let claims = self.verify_cert(&cert).await?;
+        self.check_claims(&claims).await
     }
 
-    fn verify_cert(&self, cert: &Certificate) -> Result<Claims> {
+    async fn verify_cert(&self, cert: &Certificate) -> Result<Claims> {
         /* check self-signed cert */
         verify_cert_signature(&cert, &cert).kind(ErrorKind::CertVerifySignatureFailed)?;
 
@@ -133,9 +141,11 @@ impl CertVerifier {
                         )
                     })?;
                 let tee_type = evidence.get_tee_type();
-                debug!("TEE type of this cert is {:?}", tee_type);
+                tracing::debug!("TEE type of this cert is {:?}", tee_type);
                 let verifier = AutoVerifier::new();
-                verifier.verify_evidence(&evidence, &claims_buffer_hash)?;
+                verifier
+                    .verify_evidence(&evidence, &claims_buffer_hash)
+                    .await?;
                 evidence.get_claims()?
             }
             VerifyPolicy::Coco {
@@ -159,9 +169,9 @@ impl CertVerifier {
                                 cbor_tag, &raw_evidence[..10],raw_evidence.len()
                             )
                         })?;
-                        debug!("Creating CocoConverter now. as_addr: {as_addr}, policy_ids: {policy_ids:?}, as_is_grpc: {}", *as_is_grpc );
+                        tracing::debug!("Creating CocoConverter now. as_addr: {as_addr}, policy_ids: {policy_ids:?}, as_is_grpc: {}", *as_is_grpc );
                         let converter = CocoConverter::new(&as_addr, &policy_ids, *as_is_grpc)?;
-                        converter.convert(&evidence)?
+                        converter.convert(&evidence).await?
                     }
                     CocoVerifyMode::Token => {
                         let token = Into::<Result<_>>::into(CocoAsToken::create_evidence_from_dice(
@@ -178,7 +188,9 @@ impl CertVerifier {
                     }
                 };
                 let verifier = CocoVerifier::new(&trusted_certs_paths, &policy_ids)?;
-                verifier.verify_evidence(&token, &claims_buffer_hash)?;
+                verifier
+                    .verify_evidence(&token, &claims_buffer_hash)
+                    .await?;
                 token.get_claims()?
             }
         };
@@ -218,7 +230,7 @@ impl CertVerifier {
         custom_claims.into_iter().for_each(|(k, v)| {
         if claims.contains_key(&k) {
             /* Note that custom claims do not have the guarantees that come with hardware, so we need to prevent custom claims from overriding built-in claims (guaranteed by TEE hardware). */
-            warn!("Claims overriding is detected and is prevented: a custom claim with key '{k}' duplicates existing built-in claims");
+            tracing::warn!("Claims overriding is detected and is prevented: a custom claim with key '{k}' duplicates existing built-in claims");
             return;
         }
         claims.insert(k, v);
@@ -227,24 +239,24 @@ impl CertVerifier {
         Ok(claims)
     }
 
-    fn check_claims(&self, claims: &Claims) -> Result<VerifyPolicyOutput> {
-        if log_enabled!(Debug) {
-            let iter =
-                claims
-                    .iter()
-                    .map(|(name, value)| match std::str::from_utf8(value.as_ref()) {
-                        Ok(s) if !s.contains('\0') => {
-                            format!("\t{}:\tb\"{}\"", name, s)
-                        }
-                        _ => format!("\t{}:\t{}", name, hex::encode(value)),
-                    });
-            let mergered: String = Itertools::intersperse(iter, "\n".into()).collect();
-            debug!(
-                "There are {} claims parsed from the cert:\n{}",
-                claims.len(),
+    async fn check_claims(&self, claims: &Claims) -> Result<VerifyPolicyOutput> {
+        tracing::debug!(
+            "There are {} claims parsed from the cert:\n{}",
+            claims.len(),
+            {
+                let iter =
+                    claims
+                        .iter()
+                        .map(|(name, value)| match std::str::from_utf8(value.as_ref()) {
+                            Ok(s) if !s.contains('\0') => {
+                                format!("\t{}:\tb\"{}\"", name, s)
+                            }
+                            _ => format!("\t{}:\t{}", name, hex::encode(value)),
+                        });
+                let mergered: String = Itertools::intersperse(iter, "\n".into()).collect();
                 mergered
-            );
-        }
+            }
+        );
 
         match &self.policy {
             VerifyPolicy::Local(claims_check) | VerifyPolicy::Coco { claims_check, .. } => {
@@ -256,13 +268,13 @@ impl CertVerifier {
                     .all(|(name, expected_value)| match claims.get(name) {
                         Some(value) => {
                             if expected_value != value {
-                                error!("Claim mismatch detected, with claim name: {name}\n\t\t\texpected:\t{}\n\t\t\tgot:\t{}", ByteSlice::as_bstr(&value[..]), ByteSlice::as_bstr(&expected_value[..]));
+                                tracing::error!("Claim mismatch detected, with claim name: {name}\n\t\t\texpected:\t{}\n\t\t\tgot:\t{}", ByteSlice::as_bstr(&value[..]), ByteSlice::as_bstr(&expected_value[..]));
                                 return false;
                             }
                             true
                         }
                         None => {
-                            error!("Claim missing detected, with claim name: {name}");
+                            tracing::error!("Claim missing detected, with claim name: {name}");
                             false
                         },
                     });
@@ -272,7 +284,7 @@ impl CertVerifier {
                             Ok(VerifyPolicyOutput::Failed)
                         }
                     }
-                    ClaimsCheck::Custom(func) => Ok(func(claims)),
+                    ClaimsCheck::Custom(func) => Ok(func(claims).await),
                 }
             }
         }

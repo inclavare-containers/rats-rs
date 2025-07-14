@@ -1,29 +1,27 @@
 [package]
-name = "c-api"
-description = "C API exported by rats-rs"
 authors = ["Kun Lai <me@imlk.top>"]
-version.workspace = true
+description = "C API exported by rats-rs"
 edition.workspace = true
 license.workspace = true
+name = "c-api"
+version.workspace = true
 
 [dependencies]
-rats-cert = {path = "../rats-cert", default-features = false, features = ["crypto-rustcrypto", "is-sync"]}
-zeroize = {workspace = true}
 ctor = "0.2.9"
-env_logger = {workspace = true}
-log = {workspace = true}
+once_cell = {workspace = true}
+rats-cert = {path = "../rats-cert", default-features = false, features = ["crypto-rustcrypto"]}
 shadow-rs = "=0.20.1"
+zeroize = {workspace = true}
 
 [build-dependencies]
 cbindgen = "0.28.0"
 shadow-rs = "=0.20.1"
 
 [features]
+coco = ["rats-cert/attester-coco", "rats-cert/verifier-coco"]
 default = ["local", "coco"]
 local = ["rats-cert/all-attesters", "rats-cert/all-verifiers"]
-coco = ["rats-cert/coco"]
 
 [lib]
-name = "rats_rs"
 crate-type = ["cdylib", "staticlib"]
-
+name = "rats_rs"

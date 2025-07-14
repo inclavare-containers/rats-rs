@@ -70,9 +70,9 @@ impl<A: GenericAttester> CertBuilder<A> {
         self
     }
 
-    pub fn build(&self, private_key_algo: AsymmetricAlgo) -> Result<CertBundle<A::Evidence>> {
+    pub async fn build(&self, private_key_algo: AsymmetricAlgo) -> Result<CertBundle<A::Evidence>> {
         let key = DefaultCrypto::gen_private_key(private_key_algo)?;
-        let (cert, evidence) = self.build_with_private_key_inner(&key)?;
+        let (cert, evidence) = self.build_with_private_key_inner(&key).await?;
 
         Ok(CertBundle {
             private_key: key,
@@ -81,11 +81,11 @@ impl<A: GenericAttester> CertBuilder<A> {
         })
     }
 
-    pub fn build_with_private_key(
+    pub async fn build_with_private_key(
         &self,
         key: &AsymmetricPrivateKey,
     ) -> Result<CertBundle<A::Evidence>> {
-        let (cert, evidence) = self.build_with_private_key_inner(&key)?;
+        let (cert, evidence) = self.build_with_private_key_inner(&key).await?;
 
         Ok(CertBundle {
             private_key: key.clone(),
@@ -94,7 +94,7 @@ impl<A: GenericAttester> CertBuilder<A> {
         })
     }
 
-    fn build_with_private_key_inner(
+    async fn build_with_private_key_inner(
         &self,
         key: &AsymmetricPrivateKey,
     ) -> Result<(Certificate, A::Evidence)> {
@@ -115,7 +115,7 @@ impl<A: GenericAttester> CertBuilder<A> {
         let claims_buffer_hash = DefaultCrypto::hash(HashAlgo::Sha256, &claims_buffer);
 
         /* Generate evidence buffer */
-        let evidence = self.attester.get_evidence(&claims_buffer_hash)?;
+        let evidence = self.attester.get_evidence(&claims_buffer_hash).await?;
         let evidence_buffer = generate_evidence_buffer_with_tag(
             evidence.get_dice_cbor_tag(),
             &evidence.get_dice_raw_evidence()?,

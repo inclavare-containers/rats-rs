@@ -22,7 +22,6 @@ use crate::tee::auto::AutoAttester;
 use crate::GenericSecureTransPort;
 use codec::{Codec, Reader};
 use common::SpdmTransportEncap;
-use log::debug;
 use maybe_async::maybe_async;
 use spdmlib::common;
 use spdmlib::common::SecuredMessageVersion;
@@ -314,7 +313,7 @@ impl GenericSecureTransPort for SpdmRequester {
             });
             let block_str: String = itertools::Itertools::intersperse(iter, "\n".into()).collect();
 
-            debug!("Result of GET_MEASUREMENTS: number_of_blocks: {}, content_changed: {content_changed:?}, blocks:\n{}", spdm_measurement_record_structure.number_of_blocks, block_str);
+            tracing::debug!("Result of GET_MEASUREMENTS: number_of_blocks: {}, content_changed: {content_changed:?}, blocks:\n{}", spdm_measurement_record_structure.number_of_blocks, block_str);
         }
 
         let session_id = self

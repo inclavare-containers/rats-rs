@@ -1,4 +1,3 @@
-use log::error;
 use spdmlib::{
     crypto::cert_operation::CertValidationStrategy, error::SPDM_STATUS_INVALID_CERT,
     protocol::SpdmCertChainData,
@@ -32,11 +31,11 @@ impl CertValidationStrategy for RatsCertValidationStrategy {
         match verifier.verify_der(cert_chain) {
             Ok(VerifyPolicyOutput::Passed) => Ok(()),
             Ok(VerifyPolicyOutput::Failed) => {
-                error!("CertVerifier verify finished with failed output");
+                tracing::error!("CertVerifier verify finished with failed output");
                 Err(SPDM_STATUS_INVALID_CERT)
             }
             Err(e) => {
-                error!("CertVerifier failed during verifing DER cert: {:?}", e);
+                tracing::error!("CertVerifier failed during verifing DER cert: {:?}", e);
                 Err(SPDM_STATUS_INVALID_CERT)
             }
         }

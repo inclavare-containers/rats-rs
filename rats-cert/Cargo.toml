@@ -16,20 +16,19 @@ bytes = "1.10.0"
 ciborium = "0.2.2"
 const-oid = {version = "0.9.6", optional = true}
 flatten-json-object = {version = "0.6.1", optional = true}
+futures = "0.3.31"
 hex = "0.4.3"
 indexmap = {version = "2.7.1", features = ["std", "serde"]}
 intel-dcap = {path = "../intel-dcap", optional = true}
 intel-tee-quote-verification-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
 itertools = "0.14.0"
-log = {workspace = true}
-maybe-async = "0.2.10"
 occlum_dcap = {git = "https://github.com/occlum/occlum", tag = "v0.29.7", optional = true}
 p256 = {version = "0.13.2", optional = true}
 pkcs8 = {version = "0.10.2", features = ["pem"], optional = true}
 prost = {version = "0.13.4", optional = true}
 protobuf = {version = "~3.7.1", optional = true}
 rand = "0.8.5"
-reqwest = {version = "0.12", features = ["json", "blocking", "rustls-tls"], default-features = false, optional = true}
+reqwest = {version = "0.12", features = ["json", "rustls-tls"], default-features = false, optional = true}
 ring = {workspace = true, optional = true}
 rsa = {version = "0.9.7", features = ["sha2"], optional = true}
 serde = {version = "1.0", features = ["derive"]}
@@ -42,44 +41,61 @@ strum = "0.26.3"
 strum_macros = "0.26.4"
 tdx-attest-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
 thiserror = "2.0.11"
-time = {version = "0.3.37", features = ["std"]}
-tokio = {version = "1.43.0", features = ["full"], optional = true}
-tonic = {version = "0.12.3", optional = true}
+tracing = {workspace = true}
 ttrpc = {version = "0.8.4", optional = true}
 webpki = {version = "0.22.4", optional = true, features = ["alloc", "std"]}
 x509-cert = {version = "0.2.5", features = ["builder"], optional = true}
 zeroize = {workspace = true}
 
+[target.'cfg(not(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown")))'.dependencies]
+time = {version = "0.3.37", features = ["std"]}
+tokio = {version = "1.43.0", default-features = false, features = ["full"]}
+tonic = {version = "0.13.1", default-features = false, features = ["prost", "codegen", "channel"], optional = true}
+
+[target.'cfg(all(target_arch = "wasm32", target_vendor = "unknown", target_os = "unknown"))'.dependencies]
+time = {version = "0.3.37", features = ["std", "wasm-bindgen"]}
+tokio = {version = "1.43.0", default-features = false, features = ["rt"]}
+tokio_with_wasm = {version = "=0.8.6", features = ["rt", "macros", "time"]}
+tonic = {version = "0.13.1", default-features = false, features = ["prost", "codegen"], optional = true}
+tonic-web-wasm-client = {version = "0.7.1"}
+web-time = "1.1.0"
+
 [features]
 all-attesters = ["attester-sgx-dcap-occlum", "attester-tdx"]
 all-verifiers = ["verifier-sgx-dcap", "verifier-tdx"]
-async-tokio = ["dep:tokio"]
-attester-sgx-dcap = ["dep:intel-dcap"]
-attester-sgx-dcap-enclave = [] # TODO: plain enclave mode
-attester-sgx-dcap-occlum = ["attester-sgx-dcap", "dep:occlum_dcap"]
-attester-tdx = ["dep:tdx-attest-rs", "dep:intel-dcap"]
-coco = [
+attester-coco = [
   "dep:ttrpc-codegen",
   "dep:ttrpc",
   "dep:protobuf",
-  "dep:tonic-build",
-  "dep:tonic",
   "dep:prost",
-  "dep:tokio",
   "dep:webpki",
   "dep:reqwest",
   "dep:flatten-json-object",
 ]
+attester-sgx-dcap = ["dep:intel-dcap"]
+attester-sgx-dcap-enclave = [] # TODO: plain enclave mode
+attester-sgx-dcap-occlum = ["attester-sgx-dcap", "dep:occlum_dcap"]
+attester-tdx = ["dep:tdx-attest-rs", "dep:intel-dcap"]
+transport-spdm = []
+verifier-coco = [
+  "dep:tonic-build",
+  "dep:tonic",
+  "dep:protobuf",
+  "dep:prost",
+  "dep:webpki",
+  "dep:reqwest",
+  "dep:flatten-json-object",
+]
+
 crypto-rustcrypto = ["dep:x509-cert", "dep:sha2", "dep:p256", "dep:rsa", "dep:pkcs8", "dep:const-oid", "dep:signature"]
-default = ["crypto-rustcrypto", "all-attesters", "all-verifiers", "is-sync", "coco"]
-is-sync = ["maybe-async/is_sync"]
+default = ["crypto-rustcrypto", "all-attesters", "all-verifiers", "attester-coco", "verifier-coco"]
 verifier-sgx-dcap = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
 verifier-tdx = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
 
 [dev-dependencies]
-env_logger = {workspace = true}
 rayon = "1.10.0"
+tracing-subscriber = {workspace = true}
 
 [build-dependencies]
-tonic-build = {version = "0.12.3", optional = true}
+tonic-build = {version = "0.13.1", default-features = false, features = ["prost"], optional = true}
 ttrpc-codegen = {version = "0.5.0", optional = true}

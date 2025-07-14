@@ -170,7 +170,7 @@ fn rats_rs_create_cert_internal(
                 "Local attester support is not enabled in rats-rs",
             ));
         }
-        #[cfg(feature = "coco")]
+        #[cfg(any(feature = "attester-coco", feature = "verifier-coco"))]
         AttesterType::Coco {
             attest_mode,
             aa_addr,
@@ -197,7 +197,7 @@ fn rats_rs_create_cert_internal(
                 }
             }
         }
-        #[cfg(not(feature = "coco"))]
+        #[cfg(not(any(feature = "attester-coco", feature = "verifier-coco")))]
         AttesterType::Coco {
             attest_mode,
             aa_addr,

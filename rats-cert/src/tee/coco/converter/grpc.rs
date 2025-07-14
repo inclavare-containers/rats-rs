@@ -2,9 +2,7 @@ use std::sync::Mutex;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use log::debug;
 use serde_json::json;
-use tokio::runtime::Runtime;
 
 use self::as_api::attestation_request::RuntimeData;
 use self::as_api::attestation_service_client::AttestationServiceClient;
@@ -23,37 +21,26 @@ pub mod as_api {
 }
 
 pub struct CocoGrpcConverter {
-    tokio_rt: Runtime,
-    client: Mutex<AttestationServiceClient<tonic::transport::Channel>>,
+    as_addr: String,
     policy_ids: Vec<String>,
 }
 
 impl CocoGrpcConverter {
     pub fn new(as_addr: &str, policy_ids: &Vec<String>) -> Result<Self> {
-        let tokio_rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
-        // TODO: change to .await when async in rats-rs is ready
-        let client = Mutex::new(
-            tokio_rt
-                .block_on(AttestationServiceClient::connect(as_addr.to_string()))
-                .with_context(|| format!("Failed to connect grpc-as address `{as_addr}`",))?,
-        );
-
         Ok(Self {
-            tokio_rt,
-            client,
+            as_addr: as_addr.to_string(),
             policy_ids: policy_ids.to_owned(),
         })
     }
 }
 
+#[async_trait::async_trait]
 impl GenericConverter for CocoGrpcConverter {
     type InEvidence = CocoEvidence;
     type OutEvidence = CocoAsToken;
 
-    fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence> {
-        debug!(
+    async fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence> {
+        tracing::debug!(
             "Convert CoCo evidence to CoCo AS token via grpc-as with policy ids: {:?}",
             self.policy_ids
         );
@@ -76,13 +63,53 @@ impl GenericConverter for CocoGrpcConverter {
             runtime_data_hash_algorithm: runtime_data_hash_algorithm.into(),
         });
 
-        let mut client = self.client.lock()?;
-        let response: AttestationResponse = self
-            .tokio_rt
-            .block_on(client.attestation_evaluate(request))
-            .map_err(IntoRatsError::into_rats_error)
-            .context("Call attestation_evaluate() on grpc-as failed")?
-            .into_inner();
+        let mut client = async {
+            Ok::<_, anyhow::Error>(AttestationServiceClient::new(
+                #[cfg(not(all(
+                    target_arch = "wasm32",
+                    target_vendor = "unknown",
+                    target_os = "unknown"
+                )))]
+                tonic::transport::Endpoint::new(self.as_addr.to_string())?
+                    .connect()
+                    .await?,
+                #[cfg(all(
+                    target_arch = "wasm32",
+                    target_vendor = "unknown",
+                    target_os = "unknown"
+                ))]
+                tonic_web_wasm_client::Client::new(self.as_addr.to_string()),
+            ))
+        }
+        .await
+        .with_context(|| format!("Failed to connect grpc-as address `{}`", self.as_addr))?;
+
+        let fut = async move {
+            let response: AttestationResponse = client
+                .attestation_evaluate(request)
+                .await
+                .map_err(IntoRatsError::into_rats_error)
+                .context("Call attestation_evaluate() on grpc-as failed")?
+                .into_inner();
+            Ok::<_, anyhow::Error>(response)
+        };
+
+        #[cfg(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ))]
+        // In wasm32 (web), the tonic Response future is not `Send` but #[async_trait::async_trait] requires the function body to be Sen. So we have to spawn it with tokio_with_wasm::task::spawn and await for it.
+        let response = tokio_with_wasm::task::spawn(fut)
+            .await
+            .map_err(anyhow::Error::from)
+            .and_then(|e| e)?;
+        #[cfg(not(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        )))]
+        let response = fut.await?;
 
         let attestation_token = response.attestation_token;
 

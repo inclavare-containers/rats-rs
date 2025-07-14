@@ -1,12 +1,11 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 use crate::cert::dice::cbor::generate_claims_buffer;
-use rats_cert::errors::*;
 use crate::tee::GenericEvidence;
 use codec::u24;
 use codec::Codec;
 use codec::Writer;
-use log::error;
+use rats_cert::errors::*;
 use spdmlib::config;
 use spdmlib::crypto::hash;
 use spdmlib::message::*;
@@ -129,7 +128,7 @@ impl MeasurementProvider for RatsMeasurementProvider {
         measurement_index: usize,
     ) -> Option<SpdmMeasurementRecordStructure> {
         if measurement_specification != SpdmMeasurementSpecification::DMTF {
-            error!("Unsupported measurement specification: {measurement_specification:?}");
+            tracing::error!("Unsupported measurement specification: {measurement_specification:?}");
             return None;
         }
 
@@ -150,7 +149,7 @@ impl MeasurementProvider for RatsMeasurementProvider {
             let (measurement_record_data, measurement_record_length) = self
                 .create_rats_measurement_block_data(measurement_hash_algo)
                 .map_err(|e| {
-                    error!("Failed to create measurement block data: {e:?}");
+                    tracing::error!("Failed to create measurement block data: {e:?}");
                     e
                 })
                 .ok()?;
@@ -180,7 +179,7 @@ impl MeasurementProvider for RatsMeasurementProvider {
                 let (measurement_record_data, measurement_record_length) = self
                     .create_rats_measurement_block_data(measurement_hash_algo)
                     .map_err(|e| {
-                        error!("Failed to create measurement block data: {e:?}");
+                        tracing::error!("Failed to create measurement block data: {e:?}");
                         e
                     })
                     .ok()?;
@@ -208,7 +207,7 @@ impl MeasurementProvider for EmptyMeasurementProvider {
         measurement_index: usize,
     ) -> Option<SpdmMeasurementRecordStructure> {
         if measurement_specification != SpdmMeasurementSpecification::DMTF {
-            error!("Unsupported measurement specification: {measurement_specification:?}");
+            tracing::error!("Unsupported measurement specification: {measurement_specification:?}");
             return None;
         }
 

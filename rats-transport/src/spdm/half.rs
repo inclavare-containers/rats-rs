@@ -2,8 +2,6 @@ use super::io::FramedStream;
 use crate::errors::*;
 use crate::GenericSecureTransPortRead;
 use crate::GenericSecureTransPortWrite;
-use log::debug;
-use log::warn;
 use maybe_async::maybe_async;
 use spdmlib::common::SpdmContext;
 use spdmlib::common::SpdmDeviceIo;
@@ -35,7 +33,7 @@ impl GenericSecureTransPortWrite for WriteHalf {
         // TODO: split message to blocks with negotiate_info.rsp_data_transfer_size_sel
         // TODO: disable message send after shutdown() called
 
-        debug!("session({}) send() {} bytes", self.session_id, bytes.len());
+        tracing::debug!("session({}) send() {} bytes", self.session_id, bytes.len());
 
         let mut transport_buffer = [0u8; config::SENDER_BUFFER_SIZE];
         let used;
@@ -87,7 +85,7 @@ impl GenericSecureTransPortWrite for WriteHalf {
                 .kind(ErrorKind::SpdmShutdown)
                 .context("Failed to end session")?
         } else {
-            warn!("The shutdown() is not supported by the underling stream type");
+            tracing::warn!("The shutdown() is not supported by the underling stream type");
         }
         Ok(())
     }
@@ -134,7 +132,7 @@ impl GenericSecureTransPortRead for ReadHalf {
             ))?
         }
 
-        debug!("session({}) receive() {used} bytes", self.session_id);
+        tracing::debug!("session({}) receive() {used} bytes", self.session_id);
         Ok(used)
     }
 }

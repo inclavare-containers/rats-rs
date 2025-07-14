@@ -22,6 +22,7 @@ impl CocoAttester {
     }
 
     pub fn new_with_timeout_nano(aa_addr: &str, timeout_nano: i64) -> Result<Self> {
+        // TODO: turn ttrpc client to async client
         let inner = ttrpc::Client::connect(aa_addr)
             .kind(ErrorKind::CocoConnectTtrpcFailed)
             .context(format!(
@@ -36,10 +37,11 @@ impl CocoAttester {
     }
 }
 
+#[async_trait::async_trait]
 impl GenericAttester for CocoAttester {
     type Evidence = CocoEvidence;
 
-    fn get_evidence(&self, report_data: &[u8]) -> Result<CocoEvidence> {
+    async fn get_evidence(&self, report_data: &[u8]) -> Result<CocoEvidence> {
         // Here we wrap rats-rs's report_data to a StructuredRuntimeData instead of RawRuntimeData, so that we can check the value in our verifier. See: https://github.com/confidential-containers/trustee/blob/86a407ecb1bc1897ef8fba5ee59e33e56e11ef4d/attestation-service/attestation-service/src/lib.rs#L245
         let aa_runtime_data = CocoEvidence::wrap_runtime_data_as_structed(report_data)?;
         let aa_runtime_data_hash_algo = HashAlgo::Sha384; // TODO: make this configable from user

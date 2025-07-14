@@ -1,5 +1,3 @@
-use log::error;
-
 use crate::cert::dice::cbor::OCBR_TAG_EVIDENCE_INTEL_TEE_REPORT;
 use crate::errors::*;
 use crate::tee::claims::Claims;

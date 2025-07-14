@@ -44,6 +44,7 @@ pub struct CocoEvidence {
 }
 
 impl CocoEvidence {
+    #[allow(unused)]
     pub(crate) fn new(
         aa_tee_type: AaTeeType,
         aa_evidence: Vec<u8>,

@@ -9,14 +9,13 @@ use crate::{
     CommonClientOptions, CommonServerOptions, TunnelClientOptions, TunnelServerOptions,
 };
 use anyhow::{Context, Result};
-use log::{error, info};
 use rats_transport::{GenericSecureTransPortRead, GenericSecureTransPortWrite};
 
 const THREAD_STACK_SIZE: usize = 8 * 1024 * 1024;
 
 pub fn tunnel_client(common: CommonClientOptions, opts: TunnelClientOptions) -> Result<()> {
     let listener = TcpListener::bind(&opts.ingress).expect("Invalid ingress address");
-    info!("tunnel-client listening on {}", opts.ingress);
+    tracing::info!("tunnel-client listening on {}", opts.ingress);
 
     for stream in listener.incoming() {
         match stream {
@@ -36,7 +35,7 @@ pub fn tunnel_client(common: CommonClientOptions, opts: TunnelClientOptions) -> 
                                     .with_context(|| format!("Failed to read from ingress"))?;
 
                                 if recv_len == 0 {
-                                    info!("Connection closed by ingress");
+                                    tracing::info!("Connection closed by ingress");
                                     write_half.shutdown()?;
                                     break;
                                 }
@@ -55,7 +54,7 @@ pub fn tunnel_client(common: CommonClientOptions, opts: TunnelClientOptions) -> 
                                 let recv_len = read_half.receive(&mut buf)?;
 
                                 if recv_len == 0 {
-                                    info!("Connection closed by tunnel-server");
+                                    tracing::info!("Connection closed by tunnel-server");
                                     client_stream.shutdown(Shutdown::Write)?;
                                     break;
                                 }
@@ -69,7 +68,7 @@ pub fn tunnel_client(common: CommonClientOptions, opts: TunnelClientOptions) -> 
                 })?
             }
             Err(e) => {
-                error!("Failed to accept client connection: {}", e);
+                tracing::error!("Failed to accept client connection: {}", e);
             }
         }
     }
@@ -93,7 +92,7 @@ pub fn tunnel_server(common: CommonServerOptions, opts: TunnelServerOptions) -> 
                     let recv_len = read_half.receive(&mut buf)?;
 
                     if recv_len == 0 {
-                        info!("Connection closed by tunnel-client");
+                        tracing::info!("Connection closed by tunnel-client");
                         server_stream.shutdown(Shutdown::Write)?;
                         break;
                     }
@@ -114,7 +113,7 @@ pub fn tunnel_server(common: CommonServerOptions, opts: TunnelServerOptions) -> 
                         .with_context(|| format!("Failed to read from upstream"))?;
 
                     if recv_len == 0 {
-                        info!("Connection closed by upstream");
+                        tracing::info!("Connection closed by upstream");
                         write_half.shutdown()?;
                         break;
                     }

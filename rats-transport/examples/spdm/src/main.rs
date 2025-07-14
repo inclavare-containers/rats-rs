@@ -4,7 +4,6 @@ mod tunnel;
 
 use anyhow::Result;
 use clap::{arg, ArgAction, Parser};
-use log::info;
 
 use crate::{
     echo::{echo_client, echo_server},
@@ -107,15 +106,15 @@ struct CommonClientOptions {
 }
 
 fn main() -> Result<()> {
-    let env = env_logger::Env::default()
-        .filter_or("RATS_RS_LOG_LEVEL", "debug")
-        .write_style_or("RATS_RS_LOG_STYLE", "always"); // enable color
-    env_logger::Builder::from_env(env)
-        // .format_indent(None) // No indent for each line
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "debug".into()),
+        )
         .init();
 
     let cmd = SpdmCommand::parse();
-    info!("Welcome to rats-rs spdm example!: \n\tcmd: {cmd:?}");
+    tracing::info!("Welcome to rats-rs spdm example!: \n\tcmd: {cmd:?}");
 
     match cmd {
         SpdmCommand::EchoServer(opts) => echo_server(opts)?,

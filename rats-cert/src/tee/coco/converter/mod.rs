@@ -44,14 +44,16 @@ impl CocoConverter {
     }
 }
 
+#[async_trait::async_trait]
+
 impl GenericConverter for CocoConverter {
     type InEvidence = CocoEvidence;
     type OutEvidence = CocoAsToken;
 
-    fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence> {
+    async fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence> {
         match self {
-            CocoConverter::Grpc(converter) => converter.convert(in_evidence),
-            CocoConverter::Restful(converter) => converter.convert(in_evidence),
+            CocoConverter::Grpc(converter) => converter.convert(in_evidence).await,
+            CocoConverter::Restful(converter) => converter.convert(in_evidence).await,
         }
     }
 }

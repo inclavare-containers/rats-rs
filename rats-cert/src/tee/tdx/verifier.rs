@@ -11,7 +11,6 @@ use intel_tee_quote_verification_rs::{
     sgx_ql_qv_result_t, sgx_ql_qv_supplemental_t, tee_get_supplemental_data_version_and_size,
     tee_qv_get_collateral, tee_supp_data_descriptor_t, tee_verify_quote,
 };
-use log::{debug, warn};
 
 #[derive(Debug, Default)]
 pub struct TdxVerifier {}
@@ -57,8 +56,10 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
     match tee_get_supplemental_data_version_and_size(quote) {
         std::result::Result::Ok((supp_ver, supp_size)) => {
             if supp_size == mem::size_of::<sgx_ql_qv_supplemental_t>() as u32 {
-                debug!("tee_get_quote_supplemental_data_version_and_size successfully returned.");
-                debug!(
+                tracing::debug!(
+                    "tee_get_quote_supplemental_data_version_and_size successfully returned."
+                );
+                tracing::debug!(
                     "Info: latest supplemental data major version: {}, minor version: {}, size: {}",
                     u16::from_be_bytes(supp_ver.to_be_bytes()[..2].try_into()?),
                     u16::from_be_bytes(supp_ver.to_be_bytes()[2..].try_into()?),
@@ -66,7 +67,7 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
                 );
                 supp_data_desc.data_size = supp_size;
             } else {
-                warn!("Quote supplemental data size is different between DCAP QVL and QvE, please make sure you installed DCAP QVL and QvE from same release.")
+                tracing::warn!("Quote supplemental data size is different between DCAP QVL and QvE, please make sure you installed DCAP QVL and QvE from same release.")
             }
         }
         Err(e) => Err(Error::kind_with_msg(
@@ -81,11 +82,11 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
     // get collateral
     let p_collateral = match tee_qv_get_collateral(quote) {
         std::result::Result::Ok(c) => {
-            debug!("tee_qv_get_collateral successfully returned.");
+            tracing::debug!("tee_qv_get_collateral successfully returned.");
             Some(c)
         }
         Err(e) => {
-            warn!("tee_qv_get_collateral failed: {:#04x}", e as u32);
+            tracing::warn!("tee_qv_get_collateral failed: {:#04x}", e as u32);
             None
         }
     };
@@ -117,7 +118,7 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
         )
     })?;
 
-    debug!("tee_verify_quote successfully returned.");
+    tracing::debug!("tee_verify_quote successfully returned.");
 
     // check verification result
     match quote_verification_result {
@@ -125,9 +126,9 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
             // check verification collateral expiration status
             // this value should be considered in your own attestation/verification policy
             if collateral_expiration_status == 0 {
-                debug!("Verification completed successfully.");
+                tracing::debug!("Verification completed successfully.");
             } else {
-                warn!("Verification completed, but collateral is out of date based on 'expiration_check_date' you provided.");
+                tracing::warn!("Verification completed, but collateral is out of date based on 'expiration_check_date' you provided.");
             }
         }
         sgx_ql_qv_result_t::SGX_QL_QV_RESULT_CONFIG_NEEDED
@@ -135,7 +136,7 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
         | sgx_ql_qv_result_t::SGX_QL_QV_RESULT_OUT_OF_DATE_CONFIG_NEEDED
         | sgx_ql_qv_result_t::SGX_QL_QV_RESULT_SW_HARDENING_NEEDED
         | sgx_ql_qv_result_t::SGX_QL_QV_RESULT_CONFIG_AND_SW_HARDENING_NEEDED => {
-            warn!(
+            tracing::warn!(
                 "Verification completed with Non-terminal result: {:x}",
                 quote_verification_result as u32
             );

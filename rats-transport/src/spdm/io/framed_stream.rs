@@ -1,7 +1,6 @@
 extern crate alloc;
 
 use codec::{Codec, Reader, Writer};
-use log::{error, trace, warn};
 use spdmlib::common::SpdmDeviceIo;
 use spdmlib::config;
 use spdmlib::error::{SpdmResult, SPDM_STATUS_SEND_FAIL};
@@ -81,7 +80,7 @@ where
 
             if buffer_size >= self.read_buffer.len() {
                 /* not enough but the buffer is full */
-                warn!("broken packet: buffer is too small ({} bytes) and should be at least {expected_size} bytes", self.read_buffer.len());
+                tracing::warn!("broken packet: buffer is too small ({} bytes) and should be at least {expected_size} bytes", self.read_buffer.len());
                 break false;
             }
 
@@ -90,7 +89,7 @@ where
             let s = match self.stream.read(&mut self.read_buffer[buffer_size..]) {
                 Ok(s) => s,
                 Err(e) => {
-                    error!("broken packet: {e}");
+                    tracing::error!("broken packet: {e}");
                     break false;
                 } /* stream read error! */
             };
@@ -101,14 +100,14 @@ where
                 if buffer_size != 0 {
                     /* however, if we have already got some bytes of current packet, which means we have a incomplete packet, let's print an error msg. */
                     // TODO: return Error at here.
-                    error!("broken packet: unexpected EOF");
+                    tracing::error!("broken packet: unexpected EOF");
                 }
                 break false;
             }
         };
 
         let read_size = std::cmp::min(buffer_size, expected_size);
-        trace!(
+        tracing::trace!(
             "read framed:\t{:02x?}{:02x?}",
             &self.read_buffer[..std::cmp::min(read_size, FRAME_HEADER_SIZE)],
             &self.read_buffer[std::cmp::min(read_size, FRAME_HEADER_SIZE)..read_size]
@@ -152,7 +151,7 @@ where
             .map_err(|_| SPDM_STATUS_SEND_FAIL)?;
         self.stream.flush().map_err(|_| SPDM_STATUS_SEND_FAIL)?;
 
-        trace!("write framed:\t{:02x?}{:02x?}", &buffer[..used], payload);
+        tracing::trace!("write framed:\t{:02x?}{:02x?}", &buffer[..used], payload);
         Ok(())
     }
 

@@ -398,11 +398,13 @@ pub mod tests {
 
     #[test]
     fn test_spdm_over_tcp() -> Result<()> {
-        let _ = env_logger::builder()
-            .is_test(true)
-            .filter_level(LevelFilter::Trace)
-            .try_init();
-
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "debug".into()),
+            )
+            .init();
+    
         let test_dummy = match TeeType::detect_env() {
             Some(_) => false, /* Testing with dice cert */
             None => true,

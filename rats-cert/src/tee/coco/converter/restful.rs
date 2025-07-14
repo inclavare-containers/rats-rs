@@ -2,13 +2,11 @@ use std::sync::Mutex;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use log::debug;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 use serde_json::Value;
-use tokio::runtime::Runtime;
 
 use super::super::evidence::{CocoAsToken, CocoEvidence};
 use super::AttestationServiceHashAlgo;
@@ -26,7 +24,7 @@ pub struct CocoRestfulConverter {
 
 impl CocoRestfulConverter {
     pub fn new(as_addr: &str, policy_ids: &Vec<String>) -> Result<Self> {
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .user_agent(format!("rats-rs/{}", env!("CARGO_PKG_VERSION")))
             .build()?;
 
@@ -58,12 +56,13 @@ enum Data {
     Structured(Value),
 }
 
+#[async_trait::async_trait]
 impl GenericConverter for CocoRestfulConverter {
     type InEvidence = CocoEvidence;
     type OutEvidence = CocoAsToken;
 
-    fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence> {
-        debug!(
+    async fn convert(&self, in_evidence: &Self::InEvidence) -> Result<Self::OutEvidence> {
+        tracing::debug!(
             "Convert CoCo evidence to CoCo AS token via restful-as with policy ids: {:?}",
             self.policy_ids
         );
@@ -71,35 +70,62 @@ impl GenericConverter for CocoRestfulConverter {
         let runtime_data_hash_algorithm =
             AttestationServiceHashAlgo::from(in_evidence.get_aa_runtime_data_hash_algo()).str_id();
 
-        let response = self
-            .client
-            .post(format!("{}/attestation", self.as_addr))
-            .json(&AttestationRequest {
-                tee: in_evidence
-                    .get_tee_type()
-                    .as_attestation_service_str_id()
-                    .to_owned(),
-                evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
-                init_data: None, // TODO: add support for init_data when support on AA is ready
-                init_data_hash_algorithm: None,
-                policy_ids: self.policy_ids.clone(),
-                runtime_data: Some(Data::Structured(serde_json::from_str(
-                    in_evidence.aa_runtime_data_ref(),
-                )?)),
-                runtime_data_hash_algorithm: Some(runtime_data_hash_algorithm.into()),
-            })
-            .send()
-            .context("Send /attestation request to restful-as failed")?;
+        let url = format!("{}/attestation", self.as_addr);
+        let body = AttestationRequest {
+            tee: in_evidence
+                .get_tee_type()
+                .as_attestation_service_str_id()
+                .to_owned(),
+            evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
+            init_data: None, // TODO: add support for init_data when support on AA is ready
+            init_data_hash_algorithm: None,
+            policy_ids: self.policy_ids.clone(),
+            runtime_data: Some(Data::Structured(serde_json::from_str(
+                in_evidence.aa_runtime_data_ref(),
+            )?)),
+            runtime_data_hash_algorithm: Some(runtime_data_hash_algorithm.into()),
+        };
+        let client = self.client.clone();
 
-        let attestation_token = match response.status() {
-            reqwest::StatusCode::OK => response
+        let fut = async move {
+            let response = client
+                .post(url)
+                .json(&body)
+                .send()
+                .await
+                .context("Send /attestation request to restful-as failed")?;
+
+            let status = response.status();
+            let text = response
                 .text()
-                .context("Failed to read attestation_token from restful-as response")?,
+                .await
+                .context("Failed to read attestation_token from restful-as response")?;
+            Ok::<_, anyhow::Error>((status, text))
+        };
+
+        #[cfg(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ))]
+        // In wasm32 (web), the reqwest Response future is not `Send` but #[async_trait::async_trait] requires the function body to be Sen. So we have to spawn it with tokio_with_wasm::task::spawn and await for it.
+        let (status, text) = tokio_with_wasm::task::spawn(fut)
+            .await
+            .map_err(anyhow::Error::from)
+            .and_then(|e| e)?;
+        #[cfg(not(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        )))]
+        let (status, text) = fut.await?;
+
+        let attestation_token = match status {
+            reqwest::StatusCode::OK => text,
             _ => {
                 return Err(Error::msg(format!(
-                    "Error returned from restful-as. status: {} response: {:?}",
-                    response.status(),
-                    response.text()?,
+                    "Error returned from restful-as. status: {} response: {}",
+                    status, text,
                 )));
             }
         };

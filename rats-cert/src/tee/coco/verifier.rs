@@ -3,7 +3,6 @@ use crate::{errors::*, tee::GenericVerifier};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use log::{debug, error, trace, warn};
 use pkcs8::der::{Decode, DecodePem, Encode};
 use pkcs8::EncodePublicKey;
 use serde_json::Value;
@@ -68,7 +67,7 @@ impl CocoVerifier {
 
     fn verify_evidence_internal(&self, evidence: &CocoAsToken, report_data: &[u8]) -> Result<()> {
         let token = evidence.as_str();
-        debug!(
+        tracing::debug!(
             "Verify CoCo AS token \"{token}\" with policy ids: {:?}",
             self.policy_ids
         );
@@ -115,7 +114,7 @@ impl CocoVerifier {
         if let Some(nbf) = claims_value["nbf"].as_i64() {
             if now < nbf {
                 if now + 5 >= nbf {
-                    warn!(
+                    tracing::warn!(
                         "The token is {}s (<5s) before validity, but is tolerated",
                         nbf - now
                     );
@@ -155,7 +154,7 @@ impl CocoVerifier {
         /* Check that the key used for signing the JWT is valid */
         match &self.trusted_certs {
             None => {
-                log::warn!("No trusted certificate provided, skip verification of JWK cert of Attestation Token");
+                tracing::warn!("No trusted certificate provided, skip verification of JWK cert of Attestation Token");
             }
             Some(trusted_certs) => {
                 let mut cert_chain_der: Vec<_> = vec![];
@@ -229,7 +228,7 @@ impl CocoVerifier {
                 .iter()
                 .enumerate()
                 .map(|(i, o)| -> Result<_> {
-                    debug!("evaluation-reports[{i}]: {o}");
+                    tracing::debug!("evaluation-reports[{i}]: {o}");
                     let policy_id =  o.get("policy-id")
                         .ok_or_else(|| {
                             Error::msg(format!(
@@ -256,10 +255,11 @@ impl CocoVerifier {
     }
 }
 
+#[async_trait::async_trait]
 impl GenericVerifier for CocoVerifier {
     type Evidence = CocoAsToken;
 
-    fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()> {
+    async fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()> {
         self.verify_evidence_internal(evidence, report_data)
             .context("Failed to verify CoCo AS token")
             .map_err(|e| {
@@ -296,19 +296,25 @@ fn rs384_verify(payload: &[u8], signature: &[u8], jwk: &RsaJWK) -> Result<()> {
 }
 
 fn download_cert_chain(url: String) -> Result<Vec<x509_cert::Certificate>> {
-    let res = reqwest::blocking::get(url)?;
-    match res.status() {
-        reqwest::StatusCode::OK => {
-            let pem_cert_chain = res.text()?;
-            return Ok(x509_cert::Certificate::load_pem_chain(
-                pem_cert_chain.as_bytes(),
-            )?);
+    // TODO: change to .await when async in rats-rs is ready
+    let tokio_rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    tokio_rt.block_on(async {
+        let res = reqwest::get(url).await?;
+        match res.status() {
+            reqwest::StatusCode::OK => {
+                let pem_cert_chain = res.text().await?;
+                return Ok(x509_cert::Certificate::load_pem_chain(
+                    pem_cert_chain.as_bytes(),
+                )?);
+            }
+            _ => {
+                return Err(Error::msg(format!(
+                    "Request x5u in Attestation Token JWK Failed, Response: {:?}",
+                    res.text().await,
+                )));
+            }
         }
-        _ => {
-            return Err(Error::msg(format!(
-                "Request x5u in Attestation Token JWK Failed, Response: {:?}",
-                res.text()?,
-            )));
-        }
-    }
+    })
 }
