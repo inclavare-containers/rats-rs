@@ -60,7 +60,7 @@ pub enum ClaimsCheck {
     /// Enables the use of a custom verification function, providing flexibility for specialized validation logic.
     Custom(
         Box<
-            dyn (Fn(&Claims) -> Pin<Box<dyn Future<Output = VerifyPolicyOutput> + Send>>)
+            dyn (FnOnce(&Claims) -> Pin<Box<dyn Future<Output = VerifyPolicyOutput> + Send>>)
                 + Send
                 + Sync,
         >,
@@ -88,7 +88,7 @@ impl CertVerifier {
         Self { policy }
     }
 
-    pub async fn verify_pem(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
+    pub async fn verify_pem(self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
         let cert = Certificate::from_pem(cert)
             .kind(ErrorKind::ParseCertError)
             .context("failed to parse certificate from pem")?;
@@ -96,7 +96,7 @@ impl CertVerifier {
         self.check_claims(&claims).await
     }
 
-    pub async fn verify_der(&self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
+    pub async fn verify_der(self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
         let cert = Certificate::from_der(cert)
             .kind(ErrorKind::ParseCertError)
             .context("failed to parse certificate from der")?;
@@ -239,7 +239,7 @@ impl CertVerifier {
         Ok(claims)
     }
 
-    async fn check_claims(&self, claims: &Claims) -> Result<VerifyPolicyOutput> {
+    async fn check_claims(self, claims: &Claims) -> Result<VerifyPolicyOutput> {
         tracing::debug!(
             "There are {} claims parsed from the cert:\n{}",
             claims.len(),
@@ -258,7 +258,7 @@ impl CertVerifier {
             }
         );
 
-        match &self.policy {
+        match self.policy {
             VerifyPolicy::Local(claims_check) | VerifyPolicy::Coco { claims_check, .. } => {
                 /* For CoCo, the checking of policy_ids have done in the CocoVerifier, so there is no need to check here. */
                 match claims_check {
