@@ -175,7 +175,7 @@ impl IntoRatsError for tonic::Status {
     }
 }
 
-pub trait WithContext<T> {
+pub(crate) trait WithContext<T> {
     fn kind(self, kind: ErrorKind) -> Result<T>;
 
     fn context<C>(self, context: C) -> Result<T>
