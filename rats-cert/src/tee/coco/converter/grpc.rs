@@ -12,7 +12,7 @@ use crate::tee::GenericConverter;
 use crate::tee::GenericEvidence;
 use crate::tee::TeeType;
 
-pub mod as_api {
+mod as_api {
     pub mod v1_5_2 {
         include!(concat!(
             env!("OUT_DIR"),
