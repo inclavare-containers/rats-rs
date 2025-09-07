@@ -120,11 +120,13 @@ pub struct CocoAsToken {
 }
 
 impl CocoAsToken {
-    pub(crate) fn new(token: String) -> Result<Self> {
+    /// Create a new CocoAsToken instance from a attestation result JWT.
+    pub fn new(token: String) -> Result<Self> {
         Ok(Self { data: token })
     }
 
-    pub(crate) fn as_str(&self) -> &str {
+    /// Get the attestation result JWT as a string reference
+    pub fn as_str(&self) -> &str {
         &self.data
     }
 }
