@@ -1,4 +1,4 @@
-// Taken from https://github.com/confidential-containers/trustee/blob/6adb8383309cbb7279f1d8e1e4620556ac66481e/attestation-service/protos/attestation.proto
+// Taken from https://github.com/openanolis/trustee/blob/1916cf2045ea13a44e6b76c54978bd1b41e1ed3e/protos/attestation.proto
 
 syntax = "proto3";
 
