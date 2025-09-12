@@ -8,8 +8,12 @@ fn main() {
         let protos = vec!["src/tee/coco/protos/attestation-agent.proto"];
         let protobuf_customized = ProtobufCustomize::default().gen_mod_rs(false);
 
+        let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
+        let aa_dir = out_dir.join("attestation-agent").join("ttrpc_protocol");
+        let _ = std::fs::create_dir_all(&aa_dir); // This will panic below if the directory failed to create
+
         Codegen::new()
-            .out_dir("src/tee/coco/ttrpc_protocol")
+            .out_dir(&aa_dir)
             .inputs(&protos)
             .include("src/tee/coco/protos")
             .rust_protobuf()
@@ -20,6 +24,20 @@ fn main() {
             .rust_protobuf_customize(protobuf_customized)
             .run()
             .expect("Generate ttrpc protocol code failed.");
+
+        fn strip_inner_attribute(path: &std::path::Path) {
+            let code = std::fs::read_to_string(&path).expect("Failed to read generated file");
+            let mut writer = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
+            for line in code.lines() {
+                if !line.starts_with("//!") && !line.starts_with("#!") {
+                    std::io::Write::write_all(&mut writer, line.as_bytes()).unwrap();
+                    std::io::Write::write_all(&mut writer, &[b'\n']).unwrap();
+                }
+            }
+        }
+
+        strip_inner_attribute(&aa_dir.join("attestation_agent.rs"));
+        strip_inner_attribute(&aa_dir.join("attestation_agent_ttrpc.rs"));
     }
 
     #[cfg(feature = "verifier-coco")]

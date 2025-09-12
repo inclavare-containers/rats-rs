@@ -4,8 +4,6 @@ pub mod attester;
 pub mod converter;
 #[cfg(any(feature = "attester-coco", feature = "verifier-coco"))]
 pub mod evidence;
-#[cfg(feature = "attester-coco")]
-mod ttrpc_protocol;
 #[cfg(feature = "verifier-coco")]
 pub mod verifier;
 

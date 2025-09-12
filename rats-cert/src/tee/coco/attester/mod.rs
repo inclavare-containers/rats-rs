@@ -1,15 +1,16 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 
+use self::ttrpc_protocol::attestation_agent::{GetEvidenceRequest, GetTeeTypeRequest};
+use self::ttrpc_protocol::attestation_agent_ttrpc::AttestationAgentServiceClient;
 use super::evidence::AaTeeType;
-use super::ttrpc_protocol::attestation_agent::{GetEvidenceRequest, GetTeeTypeRequest};
+use super::evidence::CocoEvidence;
 use super::TTRPC_DEFAULT_TIMEOUT_NANO;
-use super::{
-    evidence::CocoEvidence, ttrpc_protocol::attestation_agent_ttrpc::AttestationAgentServiceClient,
-};
 use crate::crypto::{DefaultCrypto, HashAlgo};
 use crate::errors::*;
 use crate::tee::{GenericAttester, GenericEvidence, TeeType};
+
+mod ttrpc_protocol;
 
 pub struct CocoAttester {
     client: AttestationAgentServiceClient,
