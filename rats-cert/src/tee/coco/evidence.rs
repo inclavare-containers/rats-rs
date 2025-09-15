@@ -149,7 +149,25 @@ impl GenericEvidence for CocoAsToken {
             ));
         }
         let claims = URL_SAFE_NO_PAD.decode(split_token[1])?;
-        let claims_value = serde_json::from_slice::<Value>(&claims)?;
+        let claims_value = {
+            let mut claims_value =
+                serde_json::from_slice::<serde_json::Map<String, Value>>(&claims)?;
+
+            if let Some(tcb_status) = claims_value.get("tcb-status") {
+                if let Value::String(json_str) = tcb_status {
+                    let tcb_status_claims = serde_json::from_str::<Value>(json_str);
+                    match tcb_status_claims {
+                        Ok(tcb_status_claims) => {
+                            claims_value.insert("tcb-status".to_string(), tcb_status_claims);
+                        }
+                        Err(error) => {
+                            tracing::warn!(?error, "failed to parse tcb-status field")
+                        }
+                    }
+                }
+            }
+            Value::Object(claims_value)
+        };
 
         let flattened_claims_value = Flattener::new()
             .flatten(&claims_value)
