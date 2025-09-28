@@ -41,6 +41,10 @@ impl<Evidence: GenericEvidence> CertBundle<Evidence> {
     pub fn evidence(&self) -> &Evidence {
         &self.evidence
     }
+
+    pub fn cert(&self) -> &Certificate {
+        &self.cert
+    }
 }
 
 pub struct CertBuilder<A: GenericAttester> {

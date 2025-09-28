@@ -129,6 +129,27 @@ impl CocoAsToken {
     pub fn as_str(&self) -> &str {
         &self.data
     }
+
+    /// Get the attestation result JWT as a owned string
+    pub fn into_str(self) -> String {
+        self.data
+    }
+
+    pub fn exp(&self) -> Result<u64> {
+        let split_token: Vec<&str> = self.data.split('.').collect();
+        if !split_token.len() == 3 {
+            return Err(Error::msg("Illegal JWT format"));
+        }
+
+        let claims = URL_SAFE_NO_PAD.decode(split_token[1])?;
+        let claims_value = serde_json::from_slice::<Value>(&claims)?;
+
+        let Some(exp) = claims_value["exp"].as_u64() else {
+            return Err(Error::msg("token expiration unset"));
+        };
+
+        Ok(exp)
+    }
 }
 
 impl GenericEvidence for CocoAsToken {
