@@ -19,7 +19,6 @@ shadow-rs = "=0.20.1"
 
 [features]
 coco = ["rats-cert/attester-coco", "rats-cert/verifier-coco"]
-default = ["local", "coco"]
 local = ["rats-cert/all-attesters", "rats-cert/all-verifiers"]
 
 [lib]

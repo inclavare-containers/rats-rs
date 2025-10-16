@@ -1,7 +1,6 @@
 [workspace]
 default-members = [
   "rats-cert",
-  "c-api",
 ]
 exclude = [
   "rats-transport",

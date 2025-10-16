@@ -88,7 +88,7 @@ verifier-coco = [
 ]
 
 crypto-rustcrypto = ["dep:x509-cert", "dep:sha2", "dep:p256", "dep:rsa", "dep:pkcs8", "dep:const-oid", "dep:signature"]
-default = ["crypto-rustcrypto", "all-attesters", "all-verifiers", "attester-coco", "verifier-coco"]
+default = ["crypto-rustcrypto", "attester-coco", "verifier-coco"]
 verifier-sgx-dcap = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
 verifier-tdx = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
 
