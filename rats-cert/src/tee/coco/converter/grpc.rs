@@ -8,6 +8,7 @@ use super::super::evidence::{CocoAsToken, CocoEvidence};
 use super::AttestationServiceHashAlgo;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
+use crate::tee::coco::converter::CoCoNonce;
 use crate::tee::GenericConverter;
 use crate::tee::GenericEvidence;
 use crate::tee::TeeType;
@@ -39,6 +40,14 @@ impl CocoGrpcConverter {
             as_addr: as_addr.to_string(),
             policy_ids: policy_ids.to_owned(),
         })
+    }
+
+    pub async fn get_nonce(&self) -> Result<CoCoNonce> {
+        // grpc-as does not support the /challenge api, so we return a dummy nonce here
+        tracing::warn!(
+            "Connected to an grpc-as instance that does not support challenge token retrieval; falling back to dummy nonce. This may compromise freshness guarantees of evidence."
+        );
+        Ok(CoCoNonce::Jwt("dummy nonce".to_string()))
     }
 }
 

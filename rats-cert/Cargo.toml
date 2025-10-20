@@ -11,14 +11,11 @@ as-any = "0.3.2"
 async-trait = "0.1.86"
 base64 = "0.22.1"
 bitflags = "2.8.0"
-bstr = "1.11.3"
 bytes = "1.10.0"
 ciborium = "0.2.2"
 const-oid = {version = "0.9.6", optional = true}
 flatten-json-object = {version = "0.6.1", optional = true}
 futures = "0.3.31"
-hex = "0.4.3"
-indexmap = {version = "2.7.1", features = ["std", "serde"]}
 intel-dcap = {path = "../intel-dcap", optional = true}
 intel-tee-quote-verification-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.20", optional = true}
 itertools = "0.14.0"
@@ -93,6 +90,7 @@ verifier-sgx-dcap = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
 verifier-tdx = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
 
 [dev-dependencies]
+hex = "0.4.3"
 rayon = "1.10.0"
 tracing-subscriber = {workspace = true}
 

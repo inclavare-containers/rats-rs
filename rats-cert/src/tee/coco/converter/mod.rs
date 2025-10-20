@@ -1,5 +1,6 @@
 use grpc::CocoGrpcConverter;
 use restful::CocoRestfulConverter;
+use serde::{Deserialize, Serialize};
 
 use super::evidence::{CocoAsToken, CocoEvidence};
 use crate::errors::*;
@@ -11,21 +12,43 @@ use crate::{
 pub mod grpc;
 pub mod restful;
 
-pub(crate) struct AttestationServiceHashAlgo(&'static str);
+#[derive(Serialize, Deserialize)]
+pub(crate) enum AttestationServiceHashAlgo {
+    #[serde(rename = "sha256")]
+    Sha256,
+    #[serde(rename = "sha384")]
+    Sha384,
+    #[serde(rename = "sha512")]
+    Sha512,
+}
 
 impl AttestationServiceHashAlgo {
     pub fn str_id(&self) -> &'static str {
-        self.0
+        match self {
+            Self::Sha256 => "sha256",
+            Self::Sha384 => "sha384",
+            Self::Sha512 => "sha512",
+        }
     }
 }
 
 impl From<HashAlgo> for AttestationServiceHashAlgo {
     fn from(hash_algo: HashAlgo) -> Self {
-        AttestationServiceHashAlgo(match hash_algo {
-            HashAlgo::Sha256 => "sha256",
-            HashAlgo::Sha384 => "sha384",
-            HashAlgo::Sha512 => "sha512",
-        })
+        match hash_algo {
+            HashAlgo::Sha256 => Self::Sha256,
+            HashAlgo::Sha384 => Self::Sha384,
+            HashAlgo::Sha512 => Self::Sha512,
+        }
+    }
+}
+
+impl From<AttestationServiceHashAlgo> for HashAlgo {
+    fn from(as_hash_algo: AttestationServiceHashAlgo) -> Self {
+        match as_hash_algo {
+            AttestationServiceHashAlgo::Sha256 => Self::Sha256,
+            AttestationServiceHashAlgo::Sha384 => Self::Sha384,
+            AttestationServiceHashAlgo::Sha512 => Self::Sha512,
+        }
     }
 }
 
@@ -42,6 +65,17 @@ impl CocoConverter {
             Self::Restful(CocoRestfulConverter::new(&as_addr, &policy_ids)?)
         })
     }
+
+    pub async fn get_nonce(&self) -> Result<CoCoNonce> {
+        match self {
+            CocoConverter::Grpc(converter) => converter.get_nonce().await,
+            CocoConverter::Restful(converter) => converter.get_nonce().await,
+        }
+    }
+}
+
+pub enum CoCoNonce {
+    Jwt(String),
 }
 
 #[async_trait::async_trait]

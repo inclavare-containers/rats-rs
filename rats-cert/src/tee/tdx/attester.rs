@@ -1,6 +1,6 @@
 use super::evidence::TdxEvidence;
 use crate::errors::*;
-use crate::tee::GenericAttester;
+use crate::tee::{GenericAttester, ReportData};
 
 pub struct TdxAttester {}
 
@@ -13,13 +13,13 @@ impl TdxAttester {
 impl GenericAttester for TdxAttester {
     type Evidence = TdxEvidence;
 
-    fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
-        if report_data.len() > 64 {
+    fn get_evidence(&self, report_data: &ReportData) -> Result<Self::Evidence> {
+        let ReportData::Raw(report_data) = report_data else {
             Err(Error::kind_with_msg(
                 ErrorKind::InvalidParameter,
-                format!("report data length too long: {} > 64", report_data.len()),
+                format!("report data with claims is not supported"),
             ))?;
-        }
+        };
 
         let mut tdx_report_data = tdx_attest_rs::tdx_report_data_t { d: [0u8; 64usize] };
         tdx_report_data.d[..report_data.len()].clone_from_slice(report_data);

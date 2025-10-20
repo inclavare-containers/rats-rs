@@ -1,6 +1,6 @@
 use crate::errors::*;
 use crate::tee::sgx_dcap::evidence::SgxDcapEvidence;
-use crate::tee::GenericVerifier;
+use crate::tee::{GenericVerifier, ReportData};
 use intel_dcap::sgx_report_data_t;
 use intel_tee_quote_verification_rs::{
     sgx_ql_qv_result_t, sgx_ql_qv_supplemental_t, tee_get_supplemental_data_version_and_size,
@@ -23,7 +23,14 @@ impl SgxDcapVerifier {
 impl GenericVerifier for SgxDcapVerifier {
     type Evidence = SgxDcapEvidence;
 
-    fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()> {
+    fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &ReportData) -> Result<()> {
+        let ReportData::Raw(report_data) = report_data else {
+            Err(Error::kind_with_msg(
+                ErrorKind::InvalidParameter,
+                format!("report data with claims is not supported"),
+            ))?;
+        };
+
         /* Verify quote with intel sgx trust chain */
         ecdsa_quote_verification(evidence.as_quote_data())
             .context("Evidence's identity verification error.")?;
@@ -55,7 +62,9 @@ fn ecdsa_quote_verification(quote: &[u8]) -> Result<()> {
     match tee_get_supplemental_data_version_and_size(quote) {
         std::result::Result::Ok((supp_ver, supp_size)) => {
             if supp_size == mem::size_of::<sgx_ql_qv_supplemental_t>() as u32 {
-                tracing::debug!("tee_get_quote_supplemental_data_version_and_size successfully returned.");
+                tracing::debug!(
+                    "tee_get_quote_supplemental_data_version_and_size successfully returned."
+                );
                 tracing::debug!(
                     "Info: latest supplemental data major version: {}, minor version: {}, size: {}",
                     u16::from_be_bytes(supp_ver.to_be_bytes()[..2].try_into()?),

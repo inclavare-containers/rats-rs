@@ -13,10 +13,12 @@ use crate::tee::auto::{AutoEvidence, AutoVerifier, LocalEvidence};
 use crate::tee::coco::converter::CocoConverter;
 use crate::tee::coco::evidence::{CocoAsToken, CocoEvidence};
 use crate::tee::coco::verifier::CocoVerifier;
-use crate::tee::GenericConverter;
 use crate::tee::{claims::Claims, GenericEvidence, GenericVerifier};
+use crate::tee::{GenericConverter, ReportData};
 
-use bstr::ByteSlice;
+use anyhow::Context;
+use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use const_oid::ObjectIdentifier;
 use itertools::Itertools;
 use pkcs8::der::referenced::OwnedToRef;
@@ -123,13 +125,11 @@ impl CertVerifier {
         /* endorsements extension is optional */
         // TODO: endorsements extension
 
-        let (cbor_tag, raw_evidence, claims_buffer) =
-            parse_evidence_buffer_with_tag(evidence_buffer)?;
-        /* Note: the hash algo is hardcoded to sha256, as defined in the Interoperable RA-TLS */
-        let claims_buffer_hash = DefaultCrypto::hash(HashAlgo::Sha256, &claims_buffer);
+        let (cbor_tag, raw_evidence, _) = parse_evidence_buffer_with_tag(evidence_buffer)?;
+        // Note: the implementation here is not compatible with the Interoperable RA-TLS now
 
-        /* Parse evidence, verify evidence and get builtin claims */
-        let builtin_claims = match &self.policy {
+        /* Parse evidence, verify evidence and get claims from evidence */
+        let claims = match &self.policy {
             VerifyPolicy::Local(_) => {
                 let evidence = Into::<Result<_>>::into(
                         AutoEvidence::create_evidence_from_dice(cbor_tag, &raw_evidence),
@@ -144,7 +144,7 @@ impl CertVerifier {
                 tracing::debug!("TEE type of this cert is {:?}", tee_type);
                 let verifier = AutoVerifier::new();
                 verifier
-                    .verify_evidence(&evidence, &claims_buffer_hash)
+                    .verify_evidence(&evidence, &ReportData::Claims(Claims::default()/* Pass an empty claims since we will check claims later */))
                     .await?;
                 evidence.get_claims()?
             }
@@ -189,28 +189,36 @@ impl CertVerifier {
                 };
                 let verifier = CocoVerifier::new(&trusted_certs_paths, &policy_ids)?;
                 verifier
-                    .verify_evidence(&token, &claims_buffer_hash)
+                    .verify_evidence(&token, &ReportData::Claims(Claims::default()/* Pass an empty claims since we will check claims later */))
                     .await?;
                 token.get_claims()?
             }
         };
 
-        /* Parse custom claims from the claims_buffer as addition to the built-in claims. */
-        let custom_claims = parse_claims_buffer(&claims_buffer)?;
-
-        let pubkey_hash_value_buffer =
-            custom_claims
-                .get(CLAIM_NAME_PUBLIC_KEY_HASH)
+        let pubkey_hash_value_buffer = {
+            let value = claims
+                .get(&format!(
+                    "customized_claims.runtime_data.{CLAIM_NAME_PUBLIC_KEY_HASH}"
+                ))
                 .ok_or_else(|| {
                     Error::kind_with_msg(
                         ErrorKind::CertVerifyPublicKeyHashFailed,
                         format!(
                             "failed to find claim with name '{}' from claims list with length {}",
                             CLAIM_NAME_PUBLIC_KEY_HASH,
-                            custom_claims.len()
+                            claims.len()
                         ),
                     )
                 })?;
+
+            let value = value.as_str().with_context(|| {
+                format!(
+                    "the value of claim with name '{CLAIM_NAME_PUBLIC_KEY_HASH}' is not a string"
+                )
+            })?;
+
+            BASE64_STANDARD.decode(value)?
+        };
 
         /* Verify pubkey_hash */
         let (pubkey_hash_algo, pubkey_hash) =
@@ -225,37 +233,14 @@ impl CertVerifier {
             ))?
         }
 
-        /* Merge builtin claims and custom claims */
-        let mut claims = builtin_claims;
-        custom_claims.into_iter().for_each(|(k, v)| {
-        if claims.contains_key(&k) {
-            /* Note that custom claims do not have the guarantees that come with hardware, so we need to prevent custom claims from overriding built-in claims (guaranteed by TEE hardware). */
-            tracing::warn!("Claims overriding is detected and is prevented: a custom claim with key '{k}' duplicates existing built-in claims");
-            return;
-        }
-        claims.insert(k, v);
-    });
-
         Ok(claims)
     }
 
     async fn check_claims(self, claims: &Claims) -> Result<VerifyPolicyOutput> {
         tracing::debug!(
-            "There are {} claims parsed from the cert:\n{}",
+            "There are {} claims parsed from the cert:\n{:?}",
             claims.len(),
-            {
-                let iter =
-                    claims
-                        .iter()
-                        .map(|(name, value)| match std::str::from_utf8(value.as_ref()) {
-                            Ok(s) if !s.contains('\0') => {
-                                format!("\t{}:\tb\"{}\"", name, s)
-                            }
-                            _ => format!("\t{}:\t{}", name, hex::encode(value)),
-                        });
-                let mergered: String = Itertools::intersperse(iter, "\n".into()).collect();
-                mergered
-            }
+            claims
         );
 
         match self.policy {
@@ -263,21 +248,29 @@ impl CertVerifier {
                 /* For CoCo, the checking of policy_ids have done in the CocoVerifier, so there is no need to check here. */
                 match claims_check {
                     ClaimsCheck::Contains(expected_claims) => {
-                        let passed =  expected_claims
-                    .iter()
-                    .all(|(name, expected_value)| match claims.get(name) {
-                        Some(value) => {
-                            if expected_value != value {
-                                tracing::error!("Claim mismatch detected, with claim name: {name}\n\t\t\texpected:\t{}\n\t\t\tgot:\t{}", ByteSlice::as_bstr(&value[..]), ByteSlice::as_bstr(&expected_value[..]));
-                                return false;
-                            }
-                            true
-                        }
-                        None => {
-                            tracing::error!("Claim missing detected, with claim name: {name}");
-                            false
-                        },
-                    });
+                        let passed =
+                            expected_claims
+                                .iter()
+                                .all(|(name, expected)| match claims.get(name) {
+                                    Some(actually) => {
+                                        if expected != actually {
+                                            tracing::error!(
+                                                name,
+                                                ?expected,
+                                                ?actually,
+                                                "Claim mismatch detected"
+                                            );
+                                            return false;
+                                        }
+                                        true
+                                    }
+                                    None => {
+                                        tracing::error!(
+                                            "Claim missing detected, with claim name: {name}"
+                                        );
+                                        false
+                                    }
+                                });
                         if passed {
                             Ok(VerifyPolicyOutput::Passed)
                         } else {
@@ -365,8 +358,6 @@ fn extract_ext_with_oid<'a>(cert: &'a Certificate, oid: &ObjectIdentifier) -> Op
 #[cfg(test)]
 pub mod tests {
 
-    use indexmap::IndexMap;
-
     use crate::{
         cert::create::CertBuilder,
         crypto::{AsymmetricAlgo, HashAlgo},
@@ -381,8 +372,8 @@ pub mod tests {
     #[allow(unused_imports)]
     use super::*;
 
-    #[test]
-    fn test_verify_attestation_certificate() -> Result<()> {
+    #[tokio::test]
+    async fn test_verify_attestation_certificate() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
             return Ok(());
@@ -396,12 +387,14 @@ pub mod tests {
         let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
+            .build(AsymmetricAlgo::P256)
+            .await?;
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
             CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims.clone())))
-                .verify_der(&cert)?,
+                .verify_der(&cert)
+                .await?,
             VerifyPolicyOutput::Passed
         );
 
@@ -409,7 +402,8 @@ pub mod tests {
         claims_mismatch.insert("key1".into(), "test-mismatch-value".into());
         assert_eq!(
             CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims_mismatch)))
-                .verify_der(&cert)?,
+                .verify_der(&cert)
+                .await?,
             VerifyPolicyOutput::Failed
         );
 
@@ -417,15 +411,16 @@ pub mod tests {
         claims_missing.insert("key3".into(), "test-missing-value".into());
         assert_eq!(
             CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims_missing)))
-                .verify_der(&cert)?,
+                .verify_der(&cert)
+                .await?,
             VerifyPolicyOutput::Failed
         );
 
         Ok(())
     }
 
-    #[test]
-    fn test_verify_attestation_certificate_with_claims_overriding() -> Result<()> {
+    #[tokio::test]
+    async fn test_verify_attestation_certificate_with_claims_overriding() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
             return Ok(());
@@ -441,12 +436,14 @@ pub mod tests {
         let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
+            .build(AsymmetricAlgo::P256)
+            .await?;
         let cert = cert_bundle.cert_to_der()?;
 
         assert_eq!(
             CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims.clone())))
-                .verify_der(&cert)?,
+                .verify_der(&cert)
+                .await?,
             VerifyPolicyOutput::Failed
         );
 

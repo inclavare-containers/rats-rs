@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
-use crate::cert::dice::cbor::generate_claims_buffer;
 use crate::tee::GenericEvidence;
 use codec::u24;
 use codec::Codec;
@@ -25,6 +24,11 @@ impl RatsMeasurementProvider {
         let claims_buffer = generate_claims_buffer(&claims)?;
         Ok(Self { claims_buffer })
     }
+}
+
+/// The claims-buffer is a byte string of definite-length encoded CBOR map of one or two custom claims, with each claim name in text string format, and its value in byte string format.
+pub fn generate_claims_buffer(claims: &Claims) -> Result<Vec<u8>> {
+    todo!()
 }
 
 impl RatsMeasurementProvider {

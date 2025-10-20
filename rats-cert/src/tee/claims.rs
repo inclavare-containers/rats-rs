@@ -1,5 +1,3 @@
-use indexmap::map::IndexMap;
-
 /// # Claims
 ///
 /// In `rats-rs`, the concept of `Claims` aligns with that in the Remote ATtestation ProcedureS (RATS), embodying a collection of assertions conveying the authenticity and properties of an attestation report. These `Claims` serve as a critical bridge in establishing trust between an attester and a verifier.
@@ -15,7 +13,7 @@ use indexmap::map::IndexMap;
 ///     - TDX: `rats-rs/src/tee/tdx/claims.rs`
 ///
 /// - **Custom Claims**: Offered as a flexible mechanism for the attester's TEE to include any additional information during the attestation process. Unlike built-in claims that are generated and endorsed by the hardware TEE with cryptographic guarantees, custom claims are endorsed by the attester's TEE instance itself. Hence, the veracity of custom claims inherently relies on the trust established through the verification of built-in claims, underscoring the importance of a secure chain of trust from the hardware up to the application layer.
-pub type Claims = IndexMap<String, Vec<u8>>;
+pub type Claims = serde_json::Map<String, serde_json::Value>;
 
 /* Common built-in claims */
 pub const BUILT_IN_CLAIM_COMMON_EVIDENCE: &'static str = "common_evidence";

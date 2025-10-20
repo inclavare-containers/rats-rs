@@ -3,7 +3,7 @@ compile_error!("At least one `attester-sgx-dcap-*` feature should be enabled");
 
 use super::evidence::SgxDcapEvidence;
 use crate::errors::*;
-use crate::tee::GenericAttester;
+use crate::tee::{GenericAttester, ReportData};
 use occlum_dcap::{sgx_report_data_t, DcapQuote};
 
 pub struct SgxDcapAttester {}
@@ -17,7 +17,14 @@ impl SgxDcapAttester {
 impl GenericAttester for SgxDcapAttester {
     type Evidence = SgxDcapEvidence;
 
-    fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
+    fn get_evidence(&self, report_data: &ReportData) -> Result<Self::Evidence> {
+        let ReportData::Raw(report_data) = report_data else {
+            Err(Error::kind_with_msg(
+                ErrorKind::InvalidParameter,
+                format!("report data with claims is not supported"),
+            ))?;
+        };
+
         if cfg!(feature = "attester-sgx-dcap-occlum") {
             if report_data.len() > 64 {
                 Err(Error::kind_with_msg(

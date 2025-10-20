@@ -6,7 +6,7 @@ use super::{
     claims::Claims, DiceParseEvidenceOutput, GenericAttester, GenericEvidence, GenericVerifier,
     TeeType,
 };
-use crate::errors::*;
+use crate::{errors::*, tee::ReportData};
 
 pub trait LocalEvidence: AsAny + GenericEvidence {
     /// Return the type of Trusted Execution Environment (TEE) associated with the evidence.
@@ -97,7 +97,10 @@ impl AutoAttester {
 impl GenericAttester for AutoAttester {
     type Evidence = AutoEvidence;
 
-    async fn get_evidence(&self, #[allow(unused)] report_data: &[u8]) -> Result<Self::Evidence> {
+    async fn get_evidence(
+        &self,
+        #[allow(unused)] report_data: &ReportData,
+    ) -> Result<Self::Evidence> {
         let tee_type = TeeType::detect_env();
 
         if let Some(tee_type) = tee_type {
@@ -145,7 +148,7 @@ impl GenericVerifier for AutoVerifier {
     async fn verify_evidence(
         &self,
         evidence: &Self::Evidence,
-        #[allow(unused)] report_data: &[u8],
+        #[allow(unused)] report_data: &ReportData,
     ) -> Result<()> {
         #[allow(unused)]
         let tee_type = evidence.0.get_tee_type();
@@ -189,19 +192,22 @@ pub mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_auto_attester_and_auto_verifier_on_sgx_dcap() -> Result<()> {
+    #[tokio::test]
+    async fn test_auto_attester_and_auto_verifier_on_sgx_dcap() -> Result<()> {
         if TeeType::detect_env() != Some(TeeType::SgxDcap) {
             /* skip */
             return Ok(());
         }
 
-        let report_data = b"test_report_data";
+        let report_data = ReportData::Raw(b"test_report_data".to_vec());
         let attester = AutoAttester::new();
-        let evidence = attester.get_evidence(report_data)?;
+        let evidence = attester.get_evidence(&report_data).await?;
         assert_eq!(evidence.get_tee_type(), TeeType::SgxDcap);
         let verifier = AutoVerifier::new();
-        assert_eq!(verifier.verify_evidence(&evidence, report_data), Ok(()));
+        assert_eq!(
+            verifier.verify_evidence(&evidence, &report_data).await,
+            Ok(())
+        );
 
         let claims = evidence.get_claims()?;
         println!("generated claims:\n{:?}", claims);
@@ -212,16 +218,16 @@ pub mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_auto_attester_and_auto_verifier_on_non_tee() -> Result<()> {
+    #[tokio::test]
+    async fn test_auto_attester_and_auto_verifier_on_non_tee() -> Result<()> {
         if TeeType::detect_env() != None {
             /* skip */
             return Ok(());
         }
 
-        let report_data = b"test_report_data";
+        let report_data = ReportData::Raw(b"test_report_data".to_vec());
         let attester = AutoAttester::new();
-        let res = attester.get_evidence(report_data);
+        let res = attester.get_evidence(&report_data).await;
         assert!(res.is_err());
         let Err(err) = res else { panic!() };
         assert_eq!(err.get_kind(), ErrorKind::UnsupportedTeeType);

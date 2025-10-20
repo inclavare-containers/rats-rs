@@ -1,4 +1,5 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::prelude::BASE64_STANDARD;
 use base64::Engine as _;
 use flatten_json_object::Flattener;
 use serde::{Deserialize, Serialize};
@@ -11,7 +12,8 @@ use crate::cert::dice::cbor::{
 use crate::crypto::HashAlgo;
 use crate::errors::*;
 use crate::tee::claims::Claims;
-use crate::tee::{DiceParseEvidenceOutput, GenericEvidence};
+use crate::tee::coco::converter::AttestationServiceHashAlgo;
+use crate::tee::{DiceParseEvidenceOutput, GenericEvidence, ReportData};
 
 pub(crate) struct AaTeeType(String);
 
@@ -75,11 +77,26 @@ impl CocoEvidence {
         self.aa_runtime_data_hash_algo
     }
 
-    pub(crate) fn wrap_runtime_data_as_structed(report_data: &[u8]) -> Result<String> {
-        serde_json::to_string(
-            &json!({"rats-rs.raw_runtime_data": URL_SAFE_NO_PAD.encode(report_data)}),
-        )
-        .context("Failed to serialize structed runtime data")
+    pub(crate) fn wrap_runtime_data_as_structed(
+        report_data: &ReportData,
+    ) -> Result<serde_json::Value> {
+        match report_data {
+            ReportData::Raw(report_data) => {
+                Ok(json!({"rats-rs.raw_runtime_data": URL_SAFE_NO_PAD.encode(report_data)}))
+            }
+            ReportData::Claims(claims) => serde_json::to_value(claims),
+        }
+        .context("Failed to construct structed runtime data")
+    }
+
+    pub fn serialize_to_json(&self) -> serde_json::Result<serde_json::Value> {
+        Ok(serde_json::to_value(self.into_json_helper())?)
+    }
+
+    pub fn deserialize_from_json(value: serde_json::Value) -> Result<Self> {
+        Ok(Self::from_json_helper(serde_json::from_value::<
+            CocoEvidenceJsonHelper,
+        >(value)?)?)
     }
 }
 
@@ -90,7 +107,7 @@ impl GenericEvidence for CocoEvidence {
 
     fn get_dice_raw_evidence(&self) -> Result<Vec<u8>> {
         let mut res = vec![];
-        ciborium::into_writer(&self, &mut res)?;
+        ciborium::into_writer(&self.into_cbor_helper(), &mut res)?;
         Ok(res)
     }
 
@@ -104,14 +121,16 @@ impl GenericEvidence for CocoEvidence {
         raw_evidence: &[u8],
     ) -> DiceParseEvidenceOutput<Self> {
         if cbor_tag == OCBR_TAG_EVIDENCE_COCO_EVIDENCE {
-            return match ciborium::from_reader(raw_evidence)
+            match ciborium::from_reader::<CocoEvidenceCborHelper, _>(raw_evidence)
                 .context("Failed to deserialize coco evidence")
+                .and_then(|helper| CocoEvidence::from_cbor_helper(helper))
             {
                 Ok(v) => DiceParseEvidenceOutput::Ok(v),
                 Err(e) => DiceParseEvidenceOutput::MatchButInvalid(e.into()),
-            };
+            }
+        } else {
+            DiceParseEvidenceOutput::NotMatch
         }
-        return DiceParseEvidenceOutput::NotMatch;
     }
 }
 
@@ -195,16 +214,7 @@ impl GenericEvidence for CocoAsToken {
             .context("Failed to flatten JWT claims JSON object")?;
 
         Ok(match flattened_claims_value {
-            Value::Object(m) => m
-                .into_iter()
-                .filter_map(|(k, v)| -> Option<_> {
-                    match v {
-                        Value::String(s) => Some((k, s.as_bytes().into())),
-                        Value::Null => None,
-                        v => Some((k, v.to_string().into())),
-                    }
-                })
-                .collect::<Claims>(),
+            Value::Object(m) => m,
             _ => {
                 return Err(Error::kind_with_msg(
                     ErrorKind::CocoParseTokenFailed,
@@ -240,37 +250,51 @@ struct CocoEvidenceCborHelper {
     pub(self) aa_runtime_data_hash_algo: HashAlgoIanaId,
 }
 
-impl Serialize for CocoEvidence {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let helper = CocoEvidenceCborHelper {
+impl CocoEvidence {
+    fn into_cbor_helper(&self) -> CocoEvidenceCborHelper {
+        CocoEvidenceCborHelper {
             tee_type: self.aa_tee_type.as_attestation_agent_str_id().to_owned(),
             aa_evidence: ByteBuf::from(self.aa_evidence.to_owned()),
             aa_runtime_data: self.aa_runtime_data.to_owned(),
             aa_runtime_data_hash_algo: self.aa_runtime_data_hash_algo.into(),
-        };
-
-        helper.serialize(serializer)
+        }
     }
-}
 
-impl<'de> Deserialize<'de> for CocoEvidence {
-    fn deserialize<D>(deserializer: D) -> std::prelude::v1::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let helper = CocoEvidenceCborHelper::deserialize(deserializer)?;
-
+    fn from_cbor_helper(helper: CocoEvidenceCborHelper) -> Result<Self> {
         Ok(Self {
             aa_tee_type: AaTeeType::from_attestation_agent_str_id(&helper.tee_type),
             aa_evidence: helper.aa_evidence.into_vec(),
             aa_runtime_data: helper.aa_runtime_data,
-            aa_runtime_data_hash_algo: helper
-                .aa_runtime_data_hash_algo
-                .try_into()
-                .map_err(|e| serde::de::Error::custom(format!("{e:?}")))?,
+            aa_runtime_data_hash_algo: helper.aa_runtime_data_hash_algo.try_into()?,
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct CocoEvidenceJsonHelper {
+    pub(self) aa_tee_type: String,
+    // Base64 encoded
+    pub(self) aa_evidence: String,
+    pub(self) aa_runtime_data: String,
+    pub(self) aa_runtime_data_hash_algo: AttestationServiceHashAlgo,
+}
+
+impl CocoEvidence {
+    fn into_json_helper(&self) -> CocoEvidenceJsonHelper {
+        CocoEvidenceJsonHelper {
+            aa_tee_type: self.aa_tee_type.as_attestation_agent_str_id().to_owned(),
+            aa_evidence: BASE64_STANDARD.encode(&self.aa_evidence),
+            aa_runtime_data: self.aa_runtime_data.clone(),
+            aa_runtime_data_hash_algo: self.aa_runtime_data_hash_algo.into(),
+        }
+    }
+
+    fn from_json_helper(helper: CocoEvidenceJsonHelper) -> Result<Self> {
+        Ok(Self {
+            aa_tee_type: AaTeeType::from_attestation_agent_str_id(&helper.aa_tee_type),
+            aa_evidence: BASE64_STANDARD.decode(helper.aa_evidence)?,
+            aa_runtime_data: helper.aa_runtime_data,
+            aa_runtime_data_hash_algo: helper.aa_runtime_data_hash_algo.into(),
         })
     }
 }

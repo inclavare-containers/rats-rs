@@ -12,6 +12,7 @@ use super::super::evidence::{CocoAsToken, CocoEvidence};
 use super::AttestationServiceHashAlgo;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
+use crate::tee::coco::converter::CoCoNonce;
 use crate::tee::GenericConverter;
 use crate::tee::GenericEvidence;
 use crate::tee::TeeType;
@@ -33,6 +34,71 @@ impl CocoRestfulConverter {
             client,
             policy_ids: policy_ids.to_owned(),
         })
+    }
+
+    pub async fn get_nonce(&self) -> Result<CoCoNonce> {
+        tracing::debug!("Connect to restful-as with protobuf version 1.6.0");
+
+        let url = format!("{}/challenge", self.as_addr);
+
+        let client = self.client.clone();
+
+        let fut = async move {
+            let response = client
+                .post(url)
+                .json(&json!({}))
+                .send()
+                .await
+                .context("Send /challenge request to restful-as failed")?;
+
+            let status = response.status();
+            let text = response
+                .text()
+                .await
+                .context("Failed to read challenge from restful-as response")?;
+
+            Ok::<_, anyhow::Error>((status, text))
+        };
+
+        #[cfg(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ))]
+        // In wasm32 (web), the reqwest Response future is not `Send` but #[async_trait::async_trait] requires the function body to be Send. So we have to spawn it with tokio_with_wasm::task::spawn and await for it.
+        let (status, text) = tokio_with_wasm::task::spawn(fut)
+            .await
+            .map_err(anyhow::Error::from)
+            .and_then(|e| e)?;
+        #[cfg(not(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        )))]
+        let (status, text) = fut.await?;
+
+        let body_text = match status {
+            reqwest::StatusCode::OK => text,
+            _ => {
+                // Add compatibility with older trustee versions which does not support /challenge api
+                if text.contains("Failed to get inner tee") {
+                    tracing::warn!(
+                        "Connected to an older version of restful-as that does not support challenge token retrieval; falling back to dummy nonce. This may compromise freshness guarantees of evidence."
+                    );
+                    return Ok(CoCoNonce::Jwt("dummy nonce".to_string()));
+                }
+
+                return Err(Error::msg(format!(
+                    "Error returned from restful-as. status: {} response: {}",
+                    status, text,
+                )));
+            }
+        };
+
+        let challenge_response = serde_json::from_str::<GetChallengeResponse>(&body_text)
+            .context("Failed to parse challenge")?;
+
+        Ok(CoCoNonce::Jwt(challenge_response.extra_params.jwt))
     }
 }
 
@@ -109,7 +175,7 @@ impl GenericConverter for CocoRestfulConverter {
         match self.convert_v1_6_0(in_evidence).await {
             Ok(v) => Ok(v),
             Err(error) => {
-                tracing::warn!(?error, "Failed to convert CoCo evidence to CoCo AS token via grpc-as, try to convert with old grpc-as version");
+                tracing::warn!(?error, "Failed to convert CoCo evidence to CoCo AS token via restful-as, try to convert with old restful-as version");
                 self.convert_v1_5_2(in_evidence).await
             }
         }
@@ -162,7 +228,7 @@ impl CocoRestfulConverter {
             target_vendor = "unknown",
             target_os = "unknown"
         ))]
-        // In wasm32 (web), the reqwest Response future is not `Send` but #[async_trait::async_trait] requires the function body to be Sen. So we have to spawn it with tokio_with_wasm::task::spawn and await for it.
+        // In wasm32 (web), the reqwest Response future is not `Send` but #[async_trait::async_trait] requires the function body to be Send. So we have to spawn it with tokio_with_wasm::task::spawn and await for it.
         let (status, text) = tokio_with_wasm::task::spawn(fut)
             .await
             .map_err(anyhow::Error::from)
@@ -255,4 +321,17 @@ impl CocoRestfulConverter {
 
         Ok(CocoAsToken::new(attestation_token)?)
     }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GetChallengeResponse {
+    pub nonce: String,
+    #[serde(rename = "extra_params")]
+    #[serde(alias = "extra-params")]
+    pub extra_params: ExtraParams,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ExtraParams {
+    pub jwt: String,
 }

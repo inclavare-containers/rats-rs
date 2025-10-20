@@ -1,4 +1,5 @@
 use super::evidence::{CocoAsToken, CocoEvidence};
+use crate::tee::ReportData;
 use crate::{errors::*, tee::GenericVerifier};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -65,7 +66,11 @@ impl CocoVerifier {
         })
     }
 
-    fn verify_evidence_internal(&self, evidence: &CocoAsToken, report_data: &[u8]) -> Result<()> {
+    fn verify_evidence_internal(
+        &self,
+        evidence: &CocoAsToken,
+        report_data: &ReportData,
+    ) -> Result<()> {
         let token = evidence.as_str();
         tracing::debug!(
             "Verify CoCo AS token \"{token}\" with policy ids: {:?}",
@@ -86,18 +91,29 @@ impl CocoVerifier {
         /* Check report_data matchs */
         let runtime_data_expected = CocoEvidence::wrap_runtime_data_as_structed(report_data)?;
 
-        let runtime_data_in_token = serde_json::to_string(
-            claims_value
-                .get("customized_claims")
-                .map(|o| o.as_object())
-                .flatten()
-                .map(|o| o.get("runtime_data"))
-                .flatten()
-                .ok_or_else(|| Error::msg("Can not found `runtime_data` in CoCo AS token"))?,
-        )
-        .context("Failed to serialize runtime_data got from token")?;
+        let runtime_data_in_token = claims_value
+            .get("customized_claims")
+            .map(|o| o.as_object())
+            .flatten()
+            .map(|o| o.get("runtime_data"))
+            .flatten()
+            .ok_or_else(|| Error::msg("Can not found `runtime_data` in CoCo AS token"))?;
 
-        if runtime_data_expected != runtime_data_in_token {
+        let runtime_data_expected_map = runtime_data_expected
+            .as_object()
+            .ok_or_else(|| Error::msg("runtime_data_expected is not a map"))?;
+
+        let runtime_data_in_token_map = runtime_data_in_token
+            .as_object()
+            .ok_or_else(|| Error::msg("runtime_data_in_token is not a map"))?;
+
+        let is_subset = runtime_data_expected_map
+            .iter()
+            .all(|(key, value)| runtime_data_in_token_map.get(key) == Some(value));
+
+        tracing::debug!(expected = ?runtime_data_expected_map, actually = ?runtime_data_in_token_map, is_subset, "compare runtime_data");
+
+        if !is_subset {
             return Err(Error::msg("runtime_data mismatch"));
         }
 
@@ -259,7 +275,11 @@ impl CocoVerifier {
 impl GenericVerifier for CocoVerifier {
     type Evidence = CocoAsToken;
 
-    async fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()> {
+    async fn verify_evidence(
+        &self,
+        evidence: &Self::Evidence,
+        report_data: &ReportData,
+    ) -> Result<()> {
         self.verify_evidence_internal(evidence, report_data)
             .context("Failed to verify CoCo AS token")
             .map_err(|e| {

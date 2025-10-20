@@ -65,7 +65,7 @@ pub trait GenericAttester {
     type Evidence: GenericEvidence;
 
     /// Generate evidence based on the provided report data.
-    async fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence>;
+    async fn get_evidence(&self, report_data: &ReportData) -> Result<Self::Evidence>;
 }
 
 /// Trait representing a generic verifier.
@@ -74,7 +74,11 @@ pub trait GenericVerifier {
     type Evidence: GenericEvidence;
 
     /// Verify the provided evidence with the Trust Anchor and checking the report data matches the one in the evidence.
-    async fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()>;
+    async fn verify_evidence(
+        &self,
+        evidence: &Self::Evidence,
+        report_data: &ReportData,
+    ) -> Result<()>;
 }
 
 #[async_trait::async_trait]
@@ -107,7 +111,7 @@ where
 {
     type Evidence = C::OutEvidence;
 
-    async fn get_evidence(&self, report_data: &[u8]) -> Result<Self::Evidence> {
+    async fn get_evidence(&self, report_data: &ReportData) -> Result<Self::Evidence> {
         let evidence = self.attester.get_evidence(report_data).await?;
         self.converter.convert(&evidence).await
     }
@@ -137,4 +141,11 @@ impl TeeType {
         }
         return None;
     }
+}
+
+/// Enum representing report data type.
+#[derive(Debug, PartialEq, EnumIter, Clone)]
+pub enum ReportData {
+    Raw(Vec<u8>),
+    Claims(Claims),
 }

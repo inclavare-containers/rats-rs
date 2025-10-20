@@ -157,27 +157,6 @@ pub fn parse_evidence_buffer_with_tag(
 
 // TODO: endorsement buffer
 
-/// The helper is used to serialize claims and forces Serde to treat values as bytes instead of slice of `u8`.
-struct ClaimsHelper<'a>(&'a Claims);
-
-impl<'a> Serialize for ClaimsHelper<'a> {
-    fn serialize<S: Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
-        let v = self
-            .0
-            .iter()
-            .map(|claim| (Value::Text(claim.0.clone()), Value::Bytes(claim.1.clone())))
-            .collect::<Vec<_>>();
-        Value::Map(v).serialize(s)
-    }
-}
-
-/// The claims-buffer is a byte string of definite-length encoded CBOR map of one or two custom claims, with each claim name in text string format, and its value in byte string format.
-pub fn generate_claims_buffer(claims: &Claims) -> Result<Vec<u8>> {
-    let mut res = vec![];
-    ciborium::into_writer(&ClaimsHelper(claims), &mut res)?;
-    Ok(res)
-}
-
 pub fn parse_claims_buffer(claims_buffer: &[u8]) -> Result<Claims> {
     let claims: Claims = ciborium::from_reader(claims_buffer)?;
     Ok(claims)
@@ -233,25 +212,6 @@ pub mod tests {
         assert_eq!(expected_tag, res.0);
         assert_eq!(&expected_raw_evidence[..], &res.1);
         assert_eq!(&expected_claims_buffer[..], &res.2);
-        Ok(())
-    }
-
-    #[test]
-    fn test_generate_claims_buffer() -> Result<()> {
-        let mut expected = Claims::new();
-        expected.insert("key1".into(), "value1".into());
-        expected.insert("key2".into(), "value2".into());
-
-        let claims_buffer = generate_claims_buffer(&expected)?;
-        println!("claims buffer in cbor: {}", hex::encode(&claims_buffer));
-
-        assert_eq!(
-            hex::encode(&claims_buffer),
-            "a2646b6579314676616c756531646b6579324676616c756532" /* {"key1": h'76616c756531', "key2": h'76616c756532'} */
-        );
-
-        let deserialized = parse_claims_buffer(&claims_buffer)?;
-        assert_eq!(expected, deserialized);
         Ok(())
     }
 

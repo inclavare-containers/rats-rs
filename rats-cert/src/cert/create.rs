@@ -1,14 +1,14 @@
-use super::dice::cbor::{
-    generate_claims_buffer, generate_evidence_buffer_with_tag, generate_pubkey_hash_value_buffer,
-};
+use super::dice::cbor::{generate_evidence_buffer_with_tag, generate_pubkey_hash_value_buffer};
 use super::dice::generate_and_sign_dice_cert;
 use super::CLAIM_NAME_PUBLIC_KEY_HASH;
 use crate::crypto::{AsymmetricAlgo, AsymmetricPrivateKey, DefaultCrypto, HashAlgo};
 use crate::errors::*;
 use crate::tee::claims::Claims;
-use crate::tee::GenericAttester;
 use crate::tee::GenericEvidence;
+use crate::tee::{GenericAttester, ReportData};
 
+use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use pkcs8::der::{Encode, EncodePem};
 use pkcs8::LineEnding;
 use x509_cert::Certificate;
@@ -111,19 +111,21 @@ impl<A: GenericAttester> CertBuilder<A> {
             Some(claims) => claims.clone(),
             None => Claims::new(),
         };
-        claims.insert(CLAIM_NAME_PUBLIC_KEY_HASH.into(), pubkey_hash_value_buffer);
-
-        /* Serialize claims to claims_buffer */
-        let claims_buffer = generate_claims_buffer(&claims)?;
-        /* Note: the hash algo is hardcoded to sha256, as defined in the Interoperable RA-TLS */
-        let claims_buffer_hash = DefaultCrypto::hash(HashAlgo::Sha256, &claims_buffer);
+        // Note: the implementation here is not compatible with the Interoperable RA-TLS now
+        claims.insert(
+            CLAIM_NAME_PUBLIC_KEY_HASH.into(),
+            serde_json::Value::String(BASE64_STANDARD.encode(pubkey_hash_value_buffer)),
+        );
 
         /* Generate evidence buffer */
-        let evidence = self.attester.get_evidence(&claims_buffer_hash).await?;
+        let evidence = self
+            .attester
+            .get_evidence(&ReportData::Claims(claims))
+            .await?;
         let evidence_buffer = generate_evidence_buffer_with_tag(
             evidence.get_dice_cbor_tag(),
             &evidence.get_dice_raw_evidence()?,
-            &claims_buffer,
+            &[], // The claims_buffer field is deprecated, put an empty slice here
         )?;
 
         let cert = generate_and_sign_dice_cert(
@@ -150,8 +152,8 @@ pub mod tests {
     #[allow(unused_imports)]
     use super::*;
 
-    #[test]
-    fn test_get_attestation_certificate() -> Result<()> {
+    #[tokio::test]
+    async fn test_get_attestation_certificate() -> Result<()> {
         if TeeType::detect_env() == None {
             /* skip */
             return Ok(());
@@ -165,7 +167,8 @@ pub mod tests {
         let attester = AutoAttester::new();
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims.clone())
-            .build(AsymmetricAlgo::P256)?;
+            .build(AsymmetricAlgo::P256)
+            .await?;
 
         println!("generated cert:\n{}", cert_bundle.cert_to_pem()?);
         println!(
@@ -178,7 +181,8 @@ pub mod tests {
         let key = DefaultCrypto::gen_private_key(AsymmetricAlgo::P256)?;
         let cert_bundle = CertBuilder::new(attester, HashAlgo::Sha256)
             .with_claims(claims)
-            .build_with_private_key(&key)?;
+            .build_with_private_key(&key)
+            .await?;
 
         println!("generated cert:\n{}", cert_bundle.cert_to_pem()?);
         println!(

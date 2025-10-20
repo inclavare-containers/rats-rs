@@ -260,17 +260,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bstr"
-version = "1.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "531a9155a481e2ee699d4f98f43c0ca4ff8ee1bfd55c31e9e98fb29d2b176fe0"
-dependencies = [
- "memchr",
- "regex-automata 0.4.9",
- "serde",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1313,7 +1302,6 @@ checksum = "8c9c992b02b5b4c94ea26e32fe5bccb7aa7d9f390ab5c1221ff895bc7ea8b652"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.2",
- "serde",
 ]
 
 [[package]]
@@ -2133,14 +2121,12 @@ dependencies = [
  "async-trait",
  "base64",
  "bitflags 2.8.0",
- "bstr",
  "bytes",
  "ciborium",
  "const-oid",
  "flatten-json-object",
  "futures",
  "hex",
- "indexmap 2.7.1",
  "intel-dcap",
  "intel-tee-quote-verification-rs",
  "itertools 0.14.0",

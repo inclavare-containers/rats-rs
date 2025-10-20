@@ -5,7 +5,7 @@ use std::{
 
 use super::evidence::TdxEvidence;
 use crate::errors::*;
-use crate::tee::GenericVerifier;
+use crate::tee::{GenericVerifier, ReportData};
 use intel_dcap::sgx_report_data_t;
 use intel_tee_quote_verification_rs::{
     sgx_ql_qv_result_t, sgx_ql_qv_supplemental_t, tee_get_supplemental_data_version_and_size,
@@ -24,7 +24,14 @@ impl TdxVerifier {
 impl GenericVerifier for TdxVerifier {
     type Evidence = TdxEvidence;
 
-    fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &[u8]) -> Result<()> {
+    fn verify_evidence(&self, evidence: &Self::Evidence, report_data: &ReportData) -> Result<()> {
+        let ReportData::Raw(report_data) = report_data else {
+            Err(Error::kind_with_msg(
+                ErrorKind::InvalidParameter,
+                format!("report data with claims is not supported"),
+            ))?;
+        };
+
         /* Verify quote with intel sgx trust chain */
         ecdsa_quote_verification(evidence.as_quote_data())
             .context("Evidence's identity verification error.")?;
