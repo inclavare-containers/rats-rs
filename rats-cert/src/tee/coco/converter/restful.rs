@@ -1,4 +1,5 @@
 use std::sync::Mutex;
+use std::time::Duration;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -17,6 +18,8 @@ use crate::tee::GenericConverter;
 use crate::tee::GenericEvidence;
 use crate::tee::TeeType;
 
+const RESTFUL_AS_CONNECT_TIMEOUT_DEFAULT: u64 = 5;
+
 pub struct CocoRestfulConverter {
     as_addr: String,
     policy_ids: Vec<String>,
@@ -25,9 +28,14 @@ pub struct CocoRestfulConverter {
 
 impl CocoRestfulConverter {
     pub fn new(as_addr: &str, policy_ids: &Vec<String>) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .user_agent(format!("rats-rs/{}", env!("CARGO_PKG_VERSION")))
-            .build()?;
+        let client = {
+            let builder = reqwest::Client::builder()
+                .user_agent(format!("rats-rs/{}", env!("CARGO_PKG_VERSION")));
+            #[cfg(unix)]
+            let builder =
+                builder.connect_timeout(Duration::from_secs(RESTFUL_AS_CONNECT_TIMEOUT_DEFAULT));
+            builder.build()?
+        };
 
         Ok(Self {
             as_addr: as_addr.trim_end_matches('/').to_owned(),
