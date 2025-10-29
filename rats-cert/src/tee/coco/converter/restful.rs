@@ -180,18 +180,12 @@ impl GenericConverter for CocoRestfulConverter {
             self.policy_ids
         );
 
-        match self.convert_v1_6_0(in_evidence).await {
-            Ok(v) => Ok(v),
-            Err(error) => {
-                tracing::warn!(?error, "Failed to convert CoCo evidence to CoCo AS token via restful-as, try to convert with old restful-as version");
-                self.convert_v1_5_2(in_evidence).await
-            }
-        }
+        self.convert_v1_6_0_or_fallback(in_evidence).await
     }
 }
 
 impl CocoRestfulConverter {
-    async fn convert_v1_6_0(&self, in_evidence: &CocoEvidence) -> Result<CocoAsToken> {
+    async fn convert_v1_6_0_or_fallback(&self, in_evidence: &CocoEvidence) -> Result<CocoAsToken> {
         tracing::debug!("Connect to restful-as with protobuf version 1.6.0");
 
         let runtime_data_hash_algorithm =
@@ -251,8 +245,16 @@ impl CocoRestfulConverter {
         let attestation_token = match status {
             reqwest::StatusCode::OK => text,
             _ => {
+                // Add compatibility with older trustee versions which use different request parameters
+                if text.contains("missing field `tee`") {
+                    tracing::warn!(
+                        "Connected to an older version of restful-as <= 1.5.2, fallback to use old request parameters and try again"
+                    );
+                    return self.convert_v1_5_2(in_evidence).await;
+                }
+
                 return Err(Error::msg(format!(
-                    "Error returned from restful-as. status: {} response: {}",
+                    "Error returned from restful-as >= 1.6.0. status: {} response: {}",
                     status, text,
                 )));
             }
@@ -321,7 +323,7 @@ impl CocoRestfulConverter {
             reqwest::StatusCode::OK => text,
             _ => {
                 return Err(Error::msg(format!(
-                    "Error returned from restful-as. status: {} response: {}",
+                    "Error returned from restful-as <= 1.5.2. status: {} response: {}",
                     status, text,
                 )));
             }
