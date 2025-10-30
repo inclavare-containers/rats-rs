@@ -290,6 +290,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "canon-json"
+version = "0.2.1"
+source = "git+https://github.com/inclavare-containers/canon-json-rs?rev=d6fa90c68f60d3d7a51daf942d882b589541be51#d6fa90c68f60d3d7a51daf942d882b589541be51"
+dependencies = [
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "cbindgen"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2034,7 +2045,7 @@ dependencies = [
  "rustc-hash 2.1.1",
  "rustls",
  "socket2",
- "thiserror 2.0.11",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
 ]
@@ -2053,7 +2064,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.11",
+ "thiserror 2.0.17",
  "tinyvec",
  "tracing",
  "web-time",
@@ -2122,6 +2133,7 @@ dependencies = [
  "base64",
  "bitflags 2.8.0",
  "bytes",
+ "canon-json",
  "ciborium",
  "const-oid",
  "flatten-json-object",
@@ -2149,7 +2161,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tdx-attest-rs",
- "thiserror 2.0.11",
+ "thiserror 2.0.17",
  "time",
  "tokio",
  "tokio_with_wasm",
@@ -2757,11 +2769,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.11"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
+checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
 dependencies = [
- "thiserror-impl 2.0.11",
+ "thiserror-impl 2.0.17",
 ]
 
 [[package]]
@@ -2777,9 +2789,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.11"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
+checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3052,7 +3064,7 @@ dependencies = [
  "httparse",
  "js-sys",
  "pin-project",
- "thiserror 2.0.11",
+ "thiserror 2.0.17",
  "tonic",
  "tower-service",
  "wasm-bindgen",

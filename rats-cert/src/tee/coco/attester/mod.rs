@@ -1,4 +1,6 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use canon_json::CanonicalFormatter;
+use serde::Serialize;
 use serde_json::json;
 
 use self::ttrpc_protocol::attestation_agent::{GetEvidenceRequest, GetTeeTypeRequest};
@@ -38,6 +40,13 @@ impl CocoAttester {
     }
 }
 
+fn serialize_canon_json<T: Serialize>(value: T) -> Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    let mut ser = serde_json::Serializer::with_formatter(&mut buf, CanonicalFormatter::new());
+    value.serialize(&mut ser)?;
+    Ok(buf)
+}
+
 #[async_trait::async_trait]
 impl GenericAttester for CocoAttester {
     type Evidence = CocoEvidence;
@@ -45,11 +54,11 @@ impl GenericAttester for CocoAttester {
     async fn get_evidence(&self, report_data: &ReportData) -> Result<CocoEvidence> {
         // Here we wrap rats-rs's report_data to a StructuredRuntimeData instead of RawRuntimeData, so that we can check the value in our verifier. See: https://github.com/confidential-containers/trustee/blob/86a407ecb1bc1897ef8fba5ee59e33e56e11ef4d/attestation-service/attestation-service/src/lib.rs#L245
         let aa_runtime_data = CocoEvidence::wrap_runtime_data_as_structed(report_data)?;
-        let aa_runtime_data_str = serde_json::to_string(&aa_runtime_data)?;
+        let aa_runtime_data_bytes = serialize_canon_json(&aa_runtime_data)?;
         let aa_runtime_data_hash_algo = HashAlgo::Sha384; // TODO: make this configable from user
 
         let aa_runtime_data_hash_value =
-            DefaultCrypto::hash(aa_runtime_data_hash_algo, aa_runtime_data_str.as_bytes());
+            DefaultCrypto::hash(aa_runtime_data_hash_algo, &aa_runtime_data_bytes);
 
         // Get evidence from AA
         let get_evidence_req = GetEvidenceRequest {
@@ -80,7 +89,7 @@ impl GenericAttester for CocoAttester {
         Ok(CocoEvidence::new(
             tee_type,
             get_evidence_res.Evidence,
-            aa_runtime_data_str,
+            String::from_utf8(aa_runtime_data_bytes)?,
             aa_runtime_data_hash_algo,
         )?)
     }
