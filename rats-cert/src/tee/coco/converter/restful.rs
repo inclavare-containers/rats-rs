@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -27,10 +29,20 @@ pub struct CocoRestfulConverter {
 }
 
 impl CocoRestfulConverter {
-    pub fn new(as_addr: &str, policy_ids: &Vec<String>) -> Result<Self> {
+    pub fn new(
+        as_addr: &str,
+        policy_ids: &Vec<String>,
+        as_headers: &HashMap<String, String>,
+    ) -> Result<Self> {
+        let mut headers = reqwest::header::HeaderMap::new();
+        for (k, v) in as_headers {
+            headers.insert(reqwest::header::HeaderName::from_str(k)?, v.parse()?);
+        }
+
         let client = {
-            let builder = reqwest::Client::builder()
+            let mut builder = reqwest::Client::builder()
                 .user_agent(format!("rats-rs/{}", env!("CARGO_PKG_VERSION")));
+            builder = builder.default_headers(headers);
             #[cfg(unix)]
             let builder =
                 builder.connect_timeout(Duration::from_secs(RESTFUL_AS_CONNECT_TIMEOUT_DEFAULT));

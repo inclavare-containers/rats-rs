@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use grpc::CocoGrpcConverter;
 use restful::CocoRestfulConverter;
 use serde::{Deserialize, Serialize};
@@ -58,11 +60,20 @@ pub enum CocoConverter {
 }
 
 impl CocoConverter {
-    pub fn new(as_addr: &str, policy_ids: &Vec<String>, as_is_grpc: bool) -> Result<Self> {
+    pub fn new(
+        as_addr: &str,
+        policy_ids: &Vec<String>,
+        as_is_grpc: bool,
+        as_headers: &HashMap<String, String>,
+    ) -> Result<Self> {
         Ok(if as_is_grpc {
-            Self::Grpc(CocoGrpcConverter::new(&as_addr, &policy_ids)?)
+            Self::Grpc(CocoGrpcConverter::new(&as_addr, &policy_ids, as_headers)?)
         } else {
-            Self::Restful(CocoRestfulConverter::new(&as_addr, &policy_ids)?)
+            Self::Restful(CocoRestfulConverter::new(
+                &as_addr,
+                &policy_ids,
+                as_headers,
+            )?)
         })
     }
 

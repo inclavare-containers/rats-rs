@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -32,13 +33,27 @@ mod as_api {
 pub struct CocoGrpcConverter {
     as_addr: String,
     policy_ids: Vec<String>,
+    request_metadata: tonic::metadata::MetadataMap,
 }
 
 impl CocoGrpcConverter {
-    pub fn new(as_addr: &str, policy_ids: &Vec<String>) -> Result<Self> {
+    pub fn new(
+        as_addr: &str,
+        policy_ids: &Vec<String>,
+        as_headers: &HashMap<String, String>,
+    ) -> Result<Self> {
+        let mut request_metadata = tonic::metadata::MetadataMap::new();
+        for (key, value) in as_headers {
+            request_metadata.insert(
+                    <tonic::metadata::MetadataKey::<tonic::metadata::Ascii> as std::str::FromStr>::from_str(key.as_str())?,
+                    <tonic::metadata::MetadataValue::<tonic::metadata::Ascii> as std::str::FromStr>::from_str(value.as_str())?,
+                );
+        }
+
         Ok(Self {
             as_addr: as_addr.to_string(),
             policy_ids: policy_ids.to_owned(),
+            request_metadata,
         })
     }
 
@@ -79,7 +94,10 @@ impl CocoGrpcConverter {
         let runtime_data_hash_algorithm =
             AttestationServiceHashAlgo::from(in_evidence.get_aa_runtime_data_hash_algo()).str_id();
 
-        let request = tonic::Request::new(as_api::v1_6_0::AttestationRequest {
+        let request = tonic::Request::from_parts(
+            self.request_metadata.clone(),
+            tonic::Extensions::new(),
+    as_api::v1_6_0::AttestationRequest {
             verification_requests: vec![as_api::v1_6_0::IndividualAttestationRequest {
                 tee: in_evidence
                     .get_tee_type()
@@ -158,22 +176,26 @@ impl CocoGrpcConverter {
         let runtime_data_hash_algorithm =
             AttestationServiceHashAlgo::from(in_evidence.get_aa_runtime_data_hash_algo()).str_id();
 
-        let request = tonic::Request::new(as_api::v1_5_2::AttestationRequest {
-            tee: in_evidence
-                .get_tee_type()
-                .as_attestation_service_str_id()
-                .to_owned(),
-            evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
-            init_data: None, // TODO: add support for init_data when support on AA is ready
-            init_data_hash_algorithm: "".into(),
-            policy_ids: self.policy_ids.clone(),
-            runtime_data: Some(
-                as_api::v1_5_2::attestation_request::RuntimeData::StructuredRuntimeData(
-                    in_evidence.aa_runtime_data_ref().into(),
+        let request = tonic::Request::from_parts(
+            self.request_metadata.clone(),
+            tonic::Extensions::new(),
+            as_api::v1_5_2::AttestationRequest {
+                tee: in_evidence
+                    .get_tee_type()
+                    .as_attestation_service_str_id()
+                    .to_owned(),
+                evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
+                init_data: None, // TODO: add support for init_data when support on AA is ready
+                init_data_hash_algorithm: "".into(),
+                policy_ids: self.policy_ids.clone(),
+                runtime_data: Some(
+                    as_api::v1_5_2::attestation_request::RuntimeData::StructuredRuntimeData(
+                        in_evidence.aa_runtime_data_ref().into(),
+                    ),
                 ),
-            ),
-            runtime_data_hash_algorithm: runtime_data_hash_algorithm.into(),
-        });
+                runtime_data_hash_algorithm: runtime_data_hash_algorithm.into(),
+            },
+        );
 
         let mut client = async {
             Ok::<_, anyhow::Error>(

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -51,6 +52,8 @@ pub enum CocoVerifyMode {
         as_addr: String,
         /// If true, connect to Attestation Service via Grpc protocol. If false, connect via HTTP protocol.
         as_is_grpc: bool,
+        /// Custom headers to be sent with attestation service requests
+        as_headers: HashMap<String, String>,
     },
     /// Expect to receive a CoCo token and verify the token directly.
     Token,
@@ -158,6 +161,7 @@ impl CertVerifier {
                     CocoVerifyMode::Evidence {
                         as_addr,
                         as_is_grpc,
+                        as_headers,
                     } => {
                         let evidence = Into::<Result<_>>::into(CocoEvidence::create_evidence_from_dice(
                             cbor_tag,
@@ -170,7 +174,8 @@ impl CertVerifier {
                             )
                         })?;
                         tracing::debug!("Creating CocoConverter now. as_addr: {as_addr}, policy_ids: {policy_ids:?}, as_is_grpc: {}", *as_is_grpc );
-                        let converter = CocoConverter::new(&as_addr, &policy_ids, *as_is_grpc)?;
+                        let converter =
+                            CocoConverter::new(&as_addr, &policy_ids, *as_is_grpc, as_headers)?;
                         converter.convert(&evidence).await?
                     }
                     CocoVerifyMode::Token => {
