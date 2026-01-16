@@ -1,6 +1,6 @@
 use rats_cert::cert::create::CertBuilder;
 use rats_cert::cert::verify::{
-    CertVerifier, CocoVerifyMode as RatsRsCocoVerifyMode, CocoVerifyPolicy, LocalVerifyPolicy,
+    CertVerifier, CocoVerifyMode as RatsRsCocoVerifyMode, VerifyPolicy as RatsRsVerifyPolicy,
 };
 use rats_cert::crypto::{AsymmetricAlgo, AsymmetricPrivateKey, HashAlgo};
 use rats_cert::errors::*;
@@ -289,13 +289,94 @@ pub enum VerifyPolicy {
 #[allow(non_camel_case_types)]
 pub type verify_policy_t = VerifyPolicy;
 
-fn verify_with_policy<P: rats_cert::cert::verify::VerifyPolicy>(
-    policy: P,
-    cert: &[u8],
-    tokio_rt: &tokio::runtime::Runtime,
-) -> Result<()> {
-    let _ = tokio_rt.block_on(CertVerifier::new(policy).verify_pem(cert))?;
-    Ok(())
+impl TryFrom<VerifyPolicy> for RatsRsVerifyPolicy {
+    type Error = Error;
+
+    fn try_from(value: VerifyPolicy) -> Result<Self> {
+        Ok(match value {
+            VerifyPolicy::Local => RatsRsVerifyPolicy::Local,
+            VerifyPolicy::Coco {
+                verify_mode,
+                policy_ids: policy_ids_ptr,
+                policy_ids_len,
+                trusted_certs_paths: trusted_certs_paths_ptr,
+                trusted_certs_paths_len,
+            } => {
+                let verify_mode = match verify_mode {
+                    CocoVerifyMode::Evidence {
+                        as_addr,
+                        as_is_grpc,
+                        as_headers: as_headers_ptr,
+                        as_headers_len,
+                    } => {
+                        let as_addr = ffi_convert_as_addr(as_addr)?;
+
+                        let mut as_headers = HashMap::new();
+                        if !as_headers_ptr.is_null() {
+                            let c_headers = unsafe {
+                                &*std::ptr::slice_from_raw_parts(as_headers_ptr, as_headers_len)
+                            };
+                            for i in 0..as_headers_len {
+                                let header = c_headers[i];
+                                if header.name.is_null() || header.value.is_null() {
+                                    return Err(Error::kind_with_msg(
+                                        ErrorKind::InvalidParameter,
+                                        "header.name and header.value should not be null",
+                                    ));
+                                }
+                                let name =
+                                    unsafe { CStr::from_ptr(header.name) }.to_str()?.to_owned();
+                                let value = unsafe {
+                                    std::slice::from_raw_parts(header.value, header.value_len)
+                                };
+                                let value = std::str::from_utf8(value)?.to_owned();
+                                as_headers.insert(name, value);
+                            }
+                        }
+
+                        RatsRsCocoVerifyMode::Evidence {
+                            as_addr,
+                            as_is_grpc,
+                            as_headers,
+                        }
+                    }
+                    CocoVerifyMode::Token => RatsRsCocoVerifyMode::Token,
+                };
+
+                let policy_ids = ffi_convert_policy_ids(policy_ids_ptr, policy_ids_len)?;
+
+                let trusted_certs_paths = if trusted_certs_paths_len == 0 {
+                    None
+                } else {
+                    if trusted_certs_paths_ptr.is_null() {
+                        return Err(Error::kind_with_msg(
+                            ErrorKind::InvalidParameter,
+                            "trusted_certs_paths should not be null, when trusted_certs_paths_len is not 0",
+                        ));
+                    }
+                    let mut trusted_certs_paths = vec![];
+                    for path in unsafe {
+                        &*std::ptr::slice_from_raw_parts(
+                            trusted_certs_paths_ptr,
+                            trusted_certs_paths_len,
+                        )
+                    } {
+                        let path = unsafe { CStr::from_ptr(*path) }
+                            .to_str()
+                            .context("bad trusted_certs_path")?;
+                        trusted_certs_paths.push(path.to_owned())
+                    }
+                    Some(trusted_certs_paths)
+                };
+
+                RatsRsVerifyPolicy::Coco {
+                    verify_mode,
+                    policy_ids,
+                    trusted_certs_paths,
+                }
+            }
+        })
+    }
 }
 
 fn ffi_convert_policy_ids(
@@ -376,6 +457,14 @@ pub extern "C" fn rats_rs_verify_cert(
     }
     let cert = unsafe { &*std::ptr::slice_from_raw_parts(certificate, certificate_len) };
 
+    let verify_policy = match verify_policy
+        .try_into()
+        .context("The verify_policy parameter is invalid")
+    {
+        Ok(v) => v,
+        Err(e) => return Box::<Error>::into_raw(Box::new(e)),
+    };
+
     let tokio_rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -386,108 +475,10 @@ pub extern "C" fn rats_rs_verify_cert(
         Err(e) => return Box::<Error>::into_raw(Box::new(e)),
     };
 
-    match verify_policy {
-        VerifyPolicy::Local => match verify_with_policy(LocalVerifyPolicy, cert, &tokio_rt) {
-            Ok(v) => v,
-            Err(e) => return Box::<Error>::into_raw(Box::new(e)),
-        },
-        VerifyPolicy::Coco {
-            verify_mode,
-            policy_ids: policy_ids_ptr,
-            policy_ids_len,
-            trusted_certs_paths: trusted_certs_paths_ptr,
-            trusted_certs_paths_len,
-        } => {
-            let verify_mode = match verify_mode {
-                CocoVerifyMode::Evidence {
-                    as_addr,
-                    as_is_grpc,
-                    as_headers: as_headers_ptr,
-                    as_headers_len,
-                } => {
-                    let as_addr = match ffi_convert_as_addr(as_addr) {
-                        Ok(v) => v,
-                        Err(e) => return Box::<Error>::into_raw(Box::new(e)),
-                    };
-
-                    let mut as_headers = HashMap::new();
-                    if !as_headers_ptr.is_null() {
-                        let c_headers = unsafe {
-                            &*std::ptr::slice_from_raw_parts(as_headers_ptr, as_headers_len)
-                        };
-                        for i in 0..as_headers_len {
-                            let header = c_headers[i];
-                            if header.name.is_null() || header.value.is_null() {
-                                return Box::<Error>::into_raw(Box::new(Error::kind_with_msg(
-                                    ErrorKind::InvalidParameter,
-                                    "header.name and header.value should not be null",
-                                )));
-                            }
-                            let name = match unsafe { CStr::from_ptr(header.name) }.to_str() {
-                                Ok(v) => v.to_owned(),
-                                Err(e) => return Box::<Error>::into_raw(Box::new(e.into())),
-                            };
-                            let value = unsafe {
-                                std::slice::from_raw_parts(header.value, header.value_len)
-                            };
-                            let value = match std::str::from_utf8(value) {
-                                Ok(v) => v.to_owned(),
-                                Err(e) => return Box::<Error>::into_raw(Box::new(e.into())),
-                            };
-                            as_headers.insert(name, value);
-                        }
-                    }
-
-                    RatsRsCocoVerifyMode::Evidence {
-                        as_addr,
-                        as_is_grpc,
-                        as_headers,
-                    }
-                }
-                CocoVerifyMode::Token => RatsRsCocoVerifyMode::Token,
-            };
-
-            let policy_ids = match ffi_convert_policy_ids(policy_ids_ptr, policy_ids_len) {
-                Ok(v) => v,
-                Err(e) => return Box::<Error>::into_raw(Box::new(e)),
-            };
-
-            let trusted_certs_paths = if trusted_certs_paths_len == 0 {
-                None
-            } else {
-                if trusted_certs_paths_ptr.is_null() {
-                    return Box::<Error>::into_raw(Box::new(Error::kind_with_msg(
-                        ErrorKind::InvalidParameter,
-                        "trusted_certs_paths should not be null, when trusted_certs_paths_len is not 0",
-                    )));
-                }
-                let mut trusted_certs_paths = vec![];
-                for path in unsafe {
-                    &*std::ptr::slice_from_raw_parts(
-                        trusted_certs_paths_ptr,
-                        trusted_certs_paths_len,
-                    )
-                } {
-                    let path = match unsafe { CStr::from_ptr(*path) }.to_str() {
-                        Ok(v) => v,
-                        Err(e) => return Box::<Error>::into_raw(Box::new(e.into())),
-                    };
-                    trusted_certs_paths.push(path.to_owned())
-                }
-                Some(trusted_certs_paths)
-            };
-
-            let policy = CocoVerifyPolicy {
-                verify_mode,
-                policy_ids,
-                trusted_certs_paths,
-            };
-
-            match verify_with_policy(policy, cert, &tokio_rt) {
-                Ok(v) => v,
-                Err(e) => return Box::<Error>::into_raw(Box::new(e)),
-            }
-        }
+    
+    let output = match tokio_rt.block_on(CertVerifier::new(verify_policy).verify_pem(cert)) {
+        Ok(v) => v,
+        Err(e) => return Box::<Error>::into_raw(Box::new(e)),
     };
 
     /* Set output */

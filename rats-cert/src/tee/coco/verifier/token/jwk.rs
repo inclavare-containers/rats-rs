@@ -8,15 +8,14 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use jsonwebtoken::jwk::{AlgorithmParameters, EllipticCurve, Jwk};
 use jsonwebtoken::{decode, decode_header, jwk, Algorithm, DecodingKey, Header, Validation};
-use openssl::bn::{BigNum, BigNumContext};
-use openssl::ec::{EcGroup, EcKey, EcPoint};
-use openssl::nid::Nid;
-use openssl::pkey::PKey;
-use openssl::stack::Stack;
-use openssl::x509::store::X509StoreBuilder;
-use openssl::x509::X509StoreContext;
-use openssl::{rsa::Rsa, x509::X509};
 use reqwest::{get, Url};
+use rustls_pki_types::pem::PemObject;
+use rustls_pki_types::{CertificateDer, TrustAnchor, UnixTime};
+use rustls_webpki::ring::{
+    ECDSA_P256_SHA256, ECDSA_P256_SHA384, ECDSA_P384_SHA256, ECDSA_P384_SHA384,
+    RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA384, RSA_PKCS1_2048_8192_SHA512,
+};
+use rustls_webpki::EndEntityCert;
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs::File;
@@ -25,6 +24,8 @@ use std::result::Result::Ok;
 use std::str::FromStr;
 use thiserror::Error;
 use tokio::fs;
+use x509_cert::der::{Decode, DecodePem, Encode};
+use x509_cert::Certificate;
 
 const OPENID_CONFIG_URL_SUFFIX: &str = ".well-known/openid-configuration";
 
@@ -46,7 +47,7 @@ struct OpenIDConfig {
 #[derive(Clone)]
 pub struct JwkAttestationTokenVerifier {
     trusted_jwk_sets: jwk::JwkSet,
-    trusted_certs: Vec<X509>,
+    trusted_certs: Vec<CertificateDer<'static>>,
     insecure_key: bool,
 }
 
@@ -102,8 +103,11 @@ impl JwkAttestationTokenVerifier {
             let cert_content = fs::read(path).await.map_err(|_| {
                 JwksGetError::AccessFailed(format!("failed to read certificate {path}"))
             })?;
-            let cert = X509::from_pem(&cert_content)?;
-            trusted_certs.push(cert);
+
+            let cert_der = CertificateDer::from_pem_slice(&cert_content)
+                .with_context(|| format!("Failed to parse PEM certificate {}", path))?;
+
+            trusted_certs.push(cert_der);
         }
 
         Ok(Self {
@@ -114,39 +118,7 @@ impl JwkAttestationTokenVerifier {
     }
 
     fn verify_jwk_endorsement(&self, key: &Jwk) -> anyhow::Result<()> {
-        let public_key = match &key.algorithm {
-            AlgorithmParameters::RSA(rsa) => {
-                let n = URL_SAFE_NO_PAD
-                    .decode(&rsa.n)
-                    .context("decode RSA public key parameter n")?;
-                let n = BigNum::from_slice(&n)?;
-                let e = URL_SAFE_NO_PAD
-                    .decode(&rsa.e)
-                    .context("decode RSA public key parameter e")?;
-                let e = BigNum::from_slice(&e)?;
-
-                let rsa_key = Rsa::from_public_components(n, e)?;
-                PKey::from_rsa(rsa_key)?
-            }
-            AlgorithmParameters::EllipticCurve(ec) => {
-                let x = BigNum::from_slice(&URL_SAFE_NO_PAD.decode(&ec.x)?)?;
-                let y = BigNum::from_slice(&URL_SAFE_NO_PAD.decode(&ec.y)?)?;
-
-                let group = match ec.curve {
-                    EllipticCurve::P256 => EcGroup::from_curve_name(Nid::X9_62_PRIME256V1)?,
-                    _ => bail!("Unsupported elliptic curve"),
-                };
-
-                let mut ctx = BigNumContext::new()?;
-                let mut point = EcPoint::new(&group)?;
-                point.set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)?;
-
-                let ec_key = EcKey::from_public_key(&group, &point)?;
-                PKey::from_ec_key(ec_key)?
-            }
-            _ => bail!("Only RSA or EC JWKs are supported."),
-        };
-
+        // Get x5c certificate chain from JWK
         let Some(x5c) = &key.common.x509_chain else {
             bail!("No x5c extension inside JWK. Invalid public key.")
         };
@@ -155,35 +127,108 @@ impl JwkAttestationTokenVerifier {
             bail!("Empty x5c extension inside JWK. Invalid public key.")
         }
 
+        // Parse leaf certificate
         let pem = x5c[0].split('\n').collect::<String>();
-        let der = URL_SAFE_NO_PAD.decode(pem).context("Illegal x5c cert")?;
+        let leaf_der = URL_SAFE_NO_PAD.decode(pem).context("Illegal x5c cert")?;
 
-        let leaf_cert = X509::from_der(&der).context("Invalid x509 in x5c")?;
-        // verify the public key matches the leaf cert
-        if !public_key.public_eq(leaf_cert.public_key()?.as_ref()) {
-            bail!("jwk does not match x5c");
-        };
+        // Verify JWK public key matches certificate public key
+        {
+            let leaf_cert = Certificate::from_der(&leaf_der).context("Invalid x509 in x5c")?;
+            self.verify_jwk_matches_cert(key, &leaf_cert)?;
+        }
 
-        let mut cert_chain = Stack::new()?;
-        for cert in &x5c[1..] {
-            let pem = cert.split('\n').collect::<String>();
+        let leaf_cert = CertificateDer::from(leaf_der);
+        let end_entity = EndEntityCert::try_from(&leaf_cert)
+            .map_err(|e| anyhow!("Failed to parse end entity certificate: {}", e))?;
+
+        // Build a
+        let trust_anchors: Vec<_> = self
+            .trusted_certs
+            .iter()
+            .map(|cert_der| {
+                rustls_webpki::anchor_from_trusted_cert(&cert_der)
+                    .map_err(|e| anyhow!("Failed to create trust anchor from certificate: {e:?}"))
+            })
+            .collect::<Result<_, _>>()?;
+
+        // Build certificate chain
+        let mut intermediates = Vec::new();
+        for cert_pem in &x5c[1..] {
+            let pem = cert_pem.split('\n').collect::<String>();
             let der = URL_SAFE_NO_PAD.decode(&pem).context("Illegal x5c cert")?;
-
-            let cert = X509::from_der(&der).context("Invalid x509 in x5c")?;
-            cert_chain.push(cert)?;
+            intermediates.push(CertificateDer::from(der));
         }
 
-        let mut trust_store_builder = X509StoreBuilder::new()?;
-        for cert in &self.trusted_certs {
-            trust_store_builder.add_cert(cert.clone())?;
-        }
-        let trust_store = trust_store_builder.build();
+        // Use ring signature algorithms
+        let supported_algs = &[
+            ECDSA_P256_SHA256,
+            ECDSA_P256_SHA384,
+            ECDSA_P384_SHA256,
+            ECDSA_P384_SHA384,
+            RSA_PKCS1_2048_8192_SHA256,
+            RSA_PKCS1_2048_8192_SHA384,
+            RSA_PKCS1_2048_8192_SHA512,
+        ];
 
-        // verify the cert chain
-        let mut ctx = X509StoreContext::new()?;
-        if !ctx.init(&trust_store, &leaf_cert, &cert_chain, |c| c.verify_cert())? {
-            bail!("JWK cannot be validated by trust anchor");
+        // Use current time for verification
+        let time = UnixTime::now();
+
+        // Verify certificate chain using rustls-webpki
+        end_entity
+            .verify_for_usage(
+                supported_algs,
+                &trust_anchors,
+                &intermediates,
+                time,
+                rustls_webpki::KeyUsage::client_auth(),
+                None, // No revocation checking
+                None, // No additional path verification
+            )
+            .map_err(|e| anyhow!("JWK cannot be validated by trust anchor: {}", e))?;
+
+        Ok(())
+    }
+
+    // Verify JWK public key matches certificate public key
+    fn verify_jwk_matches_cert(&self, key: &Jwk, cert: &Certificate) -> anyhow::Result<()> {
+        let cert_spki = &cert.tbs_certificate.subject_public_key_info;
+        let cert_public_key_bytes = cert_spki.subject_public_key.raw_bytes();
+
+        match &key.algorithm {
+            AlgorithmParameters::RSA(rsa) => {
+                // For RSA, check if modulus is in the certificate
+                let n_bytes = URL_SAFE_NO_PAD
+                    .decode(&rsa.n)
+                    .context("decode RSA public key parameter n")?;
+
+                // Search for modulus in DER-encoded public key
+                if !cert_public_key_bytes
+                    .windows(n_bytes.len())
+                    .any(|w| w == n_bytes.as_slice())
+                {
+                    bail!("RSA modulus from JWK does not match certificate");
+                }
+            }
+            AlgorithmParameters::EllipticCurve(ec) => {
+                // For EC, construct the uncompressed point and compare
+                let x = URL_SAFE_NO_PAD
+                    .decode(&ec.x)
+                    .context("decode EC public key parameter x")?;
+                let y = URL_SAFE_NO_PAD
+                    .decode(&ec.y)
+                    .context("decode EC public key parameter y")?;
+
+                let mut point_bytes = vec![0x04]; // Uncompressed point marker
+                point_bytes.extend_from_slice(&x);
+                point_bytes.extend_from_slice(&y);
+
+                if cert_public_key_bytes != point_bytes.as_slice() {
+                    bail!("EC point from JWK does not match certificate");
+                }
+            }
+            _ => bail!("Only RSA or EC JWKs are supported."),
         }
+
         Ok(())
     }
 
