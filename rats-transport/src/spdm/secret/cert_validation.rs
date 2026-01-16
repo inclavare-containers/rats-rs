@@ -4,7 +4,7 @@ use spdmlib::{
 };
 
 use crate::{
-    cert::verify::{CertVerifier, ClaimsCheck, VerifyPolicy, VerifyPolicyOutput},
+    cert::verify::{CertVerifier, LocalVerifyPolicy, VerifyPolicyOutput},
     tee::claims::Claims,
 };
 
@@ -24,11 +24,16 @@ pub struct RatsCertValidationStrategy {}
 
 impl CertValidationStrategy for RatsCertValidationStrategy {
     fn verify_cert_chain(&self, cert_chain: &[u8]) -> spdmlib::error::SpdmResult {
-        let expected_claims = Claims::default(); // TODO: user provided
+        let tokio_rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| {
+                tracing::error!("Failed to start tokio runtime: {:?}", e);
+                SPDM_STATUS_INVALID_CERT
+            })?;
 
-        let verifier =
-            CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(expected_claims)));
-        match verifier.verify_der(cert_chain) {
+        let verifier = CertVerifier::new(LocalVerifyPolicy);
+        match tokio_rt.block_on(verifier.verify_der(cert_chain)) {
             Ok(VerifyPolicyOutput::Passed) => Ok(()),
             Ok(VerifyPolicyOutput::Failed) => {
                 tracing::error!("CertVerifier verify finished with failed output");

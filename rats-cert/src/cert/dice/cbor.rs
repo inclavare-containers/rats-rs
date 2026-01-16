@@ -174,6 +174,7 @@ pub fn generate_pubkey_hash_value_buffer(hash_algo: HashAlgo, hash: &[u8]) -> Re
     Ok(res)
 }
 
+#[allow(dead_code)]
 pub fn parse_pubkey_hash_value_buffer(
     pubkey_hash_value_buffer: &[u8],
 ) -> Result<(/* hash_algo */ HashAlgo, /* hash */ Vec<u8>)> {

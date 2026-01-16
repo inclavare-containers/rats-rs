@@ -1,7 +1,6 @@
 use rats_cert::cert::create::CertBuilder;
 use rats_cert::cert::verify::{
-    CertVerifier, ClaimsCheck as RatsRsClaimsCheck, CocoVerifyMode as RatsRsCocoVerifyMode,
-    VerifyPolicy as RatsRsVerifyPolicy, VerifyPolicyOutput,
+    CertVerifier, CocoVerifyMode as RatsRsCocoVerifyMode, CocoVerifyPolicy, LocalVerifyPolicy,
 };
 use rats_cert::crypto::{AsymmetricAlgo, AsymmetricPrivateKey, HashAlgo};
 use rats_cert::errors::*;
@@ -201,7 +200,7 @@ fn rats_rs_create_cert_internal(
         AttesterType::Coco {
             attest_mode,
             aa_addr,
-            timeout,
+            timeout_nano,
         } => {
             return Err(Error::kind_with_msg(
                 ErrorKind::UnsupportedFeatures,
@@ -209,6 +208,16 @@ fn rats_rs_create_cert_internal(
             ));
         }
     })
+}
+
+/// Represents the outcome of a certificate verification.
+#[derive(PartialEq, Debug)]
+#[repr(C)]
+pub enum VerifyPolicyOutput {
+    /// Indicates the verification has failed.
+    Failed,
+    /// Indicates the verification has passed successfully.
+    Passed,
 }
 
 #[allow(non_camel_case_types)]
@@ -244,6 +253,10 @@ pub enum CocoVerifyMode {
         as_addr: *const c_char,
         /// If true, connect to Attestation Service via Grpc protocol. If false, connect via HTTP protocol.
         as_is_grpc: bool,
+        /// Custom headers to be sent with attestation service requests
+        as_headers: *const claim_t,
+        /// The length of as_headers array
+        as_headers_len: usize,
     },
     /// Expect to receive a CoCo token and verify the token directly.
     Token,
@@ -257,7 +270,7 @@ pub type coco_verify_mode_t = CocoVerifyMode;
 #[repr(C)]
 pub enum VerifyPolicy {
     /// Verify with Local Attester
-    Local { claims_check: claims_check_t },
+    Local,
     /// Verify with CoCo policies. Should be used only when peer is using CoCo Attester
     Coco {
         /// The verify mode to select
@@ -270,116 +283,19 @@ pub enum VerifyPolicy {
         trusted_certs_paths: *const *const c_char,
         /// The length of trusted_certs_paths array
         trusted_certs_paths_len: usize,
-        /// Additional strategy for checking cliams (both builtin claims and custom claims)
-        claims_check: claims_check_t,
     },
 }
 
 #[allow(non_camel_case_types)]
 pub type verify_policy_t = VerifyPolicy;
 
-#[derive(Debug, PartialEq)]
-#[repr(C)]
-pub enum ClaimsCheck {
-    /// Verifies if the certificate contains a specific set of claims.
-    Contains {
-        /// A pointer to an array of `claim_t` structures representing the required claims.
-        claims: *const claim_t,
-        /// The number of claims in the `claims` array.
-        claims_len: usize,
-    },
-    /// Enables the use of a custom verification function, providing flexibility for specialized validation logic.
-    Custom {
-        /// A function pointer to the custom verification function that will be invoked.
-        func: custom_verifier_func,
-        /// A pointer to arbitrary data that will be passed to the custom verification function.
-        args: *mut c_void,
-    },
-}
-
-#[allow(non_camel_case_types)]
-pub type claims_check_t = ClaimsCheck;
-
-/// Signature of a custom verification function provided by the user.
-/// This function should implement the custom logic to verify certificate claims and return the result.
-/// # Arguments
-///
-/// * `claims` - A pointer to an array of `claim_t` structures representing the claims to be verified. Those claims are parsed from X.509 certs and provided by rats-rs.
-/// * `claims_len` - The number of claims in the `claims` array.
-/// * `args` - A pointer to arbitrary data provided by the caller when setting up the custom verification. Can be used within the function to hold additional context or configuration.
-#[allow(non_camel_case_types)]
-pub type custom_verifier_func = extern "C" fn(
-    claims: *const claim_t,
-    claims_len: usize,
-    args: *mut c_void,
-) -> verify_policy_output_t;
-
-impl TryFrom<VerifyPolicy> for RatsRsVerifyPolicy {
-    type Error = Error;
-
-    fn try_from(value: VerifyPolicy) -> Result<Self> {
-        Ok(match value {
-            VerifyPolicy::Local { claims_check } => {
-                RatsRsVerifyPolicy::Local(claims_check.try_into()?)
-            }
-            VerifyPolicy::Coco {
-                verify_mode,
-                policy_ids: policy_ids_ptr,
-                policy_ids_len,
-                trusted_certs_paths: trusted_certs_paths_ptr,
-                trusted_certs_paths_len,
-                claims_check,
-            } => {
-                let verify_mode = match verify_mode {
-                    CocoVerifyMode::Evidence {
-                        as_addr,
-                        as_is_grpc,
-                    } => {
-                        let as_addr = ffi_convert_as_addr(as_addr)?;
-
-                        RatsRsCocoVerifyMode::Evidence {
-                            as_addr: as_addr,
-                            as_is_grpc,
-                        }
-                    }
-                    CocoVerifyMode::Token => RatsRsCocoVerifyMode::Token,
-                };
-
-                let policy_ids = ffi_convert_policy_ids(policy_ids_ptr, policy_ids_len)?;
-
-                let trusted_certs_paths = if trusted_certs_paths_len == 0 {
-                    None
-                } else {
-                    if trusted_certs_paths_ptr.is_null() {
-                        return Err(Error::kind_with_msg(
-                            ErrorKind::InvalidParameter,
-                            "trusted_certs_paths should not be null, when trusted_certs_paths_len is not 0",
-                        ));
-                    }
-                    let mut trusted_certs_paths = vec![];
-                    for path in unsafe {
-                        &*std::ptr::slice_from_raw_parts(
-                            trusted_certs_paths_ptr,
-                            trusted_certs_paths_len,
-                        )
-                    } {
-                        let path = unsafe { CStr::from_ptr(*path) }
-                            .to_str()
-                            .context("bad trusted_certs_path")?;
-                        trusted_certs_paths.push(path.to_owned())
-                    }
-                    Some(trusted_certs_paths)
-                };
-
-                RatsRsVerifyPolicy::Coco {
-                    verify_mode,
-                    policy_ids,
-                    trusted_certs_paths,
-                    claims_check: claims_check.try_into()?,
-                }
-            }
-        })
-    }
+fn verify_with_policy<P: rats_cert::cert::verify::VerifyPolicy>(
+    policy: P,
+    cert: &[u8],
+    tokio_rt: &tokio::runtime::Runtime,
+) -> Result<()> {
+    let _ = tokio_rt.block_on(CertVerifier::new(policy).verify_pem(cert))?;
+    Ok(())
 }
 
 fn ffi_convert_policy_ids(
@@ -423,57 +339,6 @@ fn ffi_convert_as_addr(as_addr: *const c_char) -> Result<String> {
     Ok(as_addr)
 }
 
-impl TryFrom<ClaimsCheck> for RatsRsClaimsCheck {
-    type Error = Error;
-
-    fn try_from(value: ClaimsCheck) -> Result<Self> {
-        Ok(match value {
-            ClaimsCheck::Contains {
-                claims: c_claims_ptr,
-                claims_len: c_claims_len,
-            } => {
-                let mut claims = Claims::default();
-                if !c_claims_ptr.is_null() {
-                    let c_claims =
-                        unsafe { &*std::ptr::slice_from_raw_parts(c_claims_ptr, c_claims_len) };
-                    for i in 0..c_claims_len {
-                        let claim = c_claims[i];
-                        if claim.name.is_null() || claim.value.is_null() {
-                            return Err(Error::kind_with_msg(
-                                ErrorKind::InvalidParameter,
-                                "claim.name and claim.value should not be null",
-                            ));
-                        }
-                        let name = unsafe { CStr::from_ptr(claim.name) }.to_str()?;
-                        let value = unsafe {
-                            &*std::ptr::slice_from_raw_parts(claim.value, claim.value_len)
-                        };
-                        claims.insert(name.into(), value.into());
-                    }
-                }
-                RatsRsClaimsCheck::Contains(claims)
-            }
-            ClaimsCheck::Custom { func, args } => {
-                let f = move |claims: &Claims| {
-                    let mut c_claims = vec![CClaim::default(); claims.len()];
-                    let mut names = vec![]; // To make lifetime longer
-                    for (i, (name, value)) in claims.iter().enumerate() {
-                        let name = unsafe { CString::from_vec_unchecked(name.as_bytes().into()) };
-                        c_claims[i].name = name.as_ptr();
-                        names.push(name);
-
-                        c_claims[i].value = value.as_ptr();
-                        c_claims[i].value_len = value.len();
-                    }
-
-                    func(c_claims.as_ptr(), c_claims.len(), args)
-                };
-                RatsRsClaimsCheck::Custom(Box::new(f))
-            }
-        })
-    }
-}
-
 /// Verifies RATS X.509 Certificates.
 ///
 /// This function verifies the provided X.509 certificate in PEM format against a verification policy.
@@ -511,21 +376,122 @@ pub extern "C" fn rats_rs_verify_cert(
     }
     let cert = unsafe { &*std::ptr::slice_from_raw_parts(certificate, certificate_len) };
 
-    let verify_policy = match verify_policy
-        .try_into()
-        .context("The verify_policy parameter is invalid")
+    let tokio_rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .kind(ErrorKind::Unknown)
+        .context("Failed to start tokio runtime")
     {
         Ok(v) => v,
         Err(e) => return Box::<Error>::into_raw(Box::new(e)),
     };
 
-    let output = match CertVerifier::new(verify_policy).verify_pem(cert) {
-        Ok(v) => v,
-        Err(e) => return Box::<Error>::into_raw(Box::new(e)),
+    match verify_policy {
+        VerifyPolicy::Local => match verify_with_policy(LocalVerifyPolicy, cert, &tokio_rt) {
+            Ok(v) => v,
+            Err(e) => return Box::<Error>::into_raw(Box::new(e)),
+        },
+        VerifyPolicy::Coco {
+            verify_mode,
+            policy_ids: policy_ids_ptr,
+            policy_ids_len,
+            trusted_certs_paths: trusted_certs_paths_ptr,
+            trusted_certs_paths_len,
+        } => {
+            let verify_mode = match verify_mode {
+                CocoVerifyMode::Evidence {
+                    as_addr,
+                    as_is_grpc,
+                    as_headers: as_headers_ptr,
+                    as_headers_len,
+                } => {
+                    let as_addr = match ffi_convert_as_addr(as_addr) {
+                        Ok(v) => v,
+                        Err(e) => return Box::<Error>::into_raw(Box::new(e)),
+                    };
+
+                    let mut as_headers = HashMap::new();
+                    if !as_headers_ptr.is_null() {
+                        let c_headers = unsafe {
+                            &*std::ptr::slice_from_raw_parts(as_headers_ptr, as_headers_len)
+                        };
+                        for i in 0..as_headers_len {
+                            let header = c_headers[i];
+                            if header.name.is_null() || header.value.is_null() {
+                                return Box::<Error>::into_raw(Box::new(Error::kind_with_msg(
+                                    ErrorKind::InvalidParameter,
+                                    "header.name and header.value should not be null",
+                                )));
+                            }
+                            let name = match unsafe { CStr::from_ptr(header.name) }.to_str() {
+                                Ok(v) => v.to_owned(),
+                                Err(e) => return Box::<Error>::into_raw(Box::new(e.into())),
+                            };
+                            let value = unsafe {
+                                std::slice::from_raw_parts(header.value, header.value_len)
+                            };
+                            let value = match std::str::from_utf8(value) {
+                                Ok(v) => v.to_owned(),
+                                Err(e) => return Box::<Error>::into_raw(Box::new(e.into())),
+                            };
+                            as_headers.insert(name, value);
+                        }
+                    }
+
+                    RatsRsCocoVerifyMode::Evidence {
+                        as_addr,
+                        as_is_grpc,
+                        as_headers,
+                    }
+                }
+                CocoVerifyMode::Token => RatsRsCocoVerifyMode::Token,
+            };
+
+            let policy_ids = match ffi_convert_policy_ids(policy_ids_ptr, policy_ids_len) {
+                Ok(v) => v,
+                Err(e) => return Box::<Error>::into_raw(Box::new(e)),
+            };
+
+            let trusted_certs_paths = if trusted_certs_paths_len == 0 {
+                None
+            } else {
+                if trusted_certs_paths_ptr.is_null() {
+                    return Box::<Error>::into_raw(Box::new(Error::kind_with_msg(
+                        ErrorKind::InvalidParameter,
+                        "trusted_certs_paths should not be null, when trusted_certs_paths_len is not 0",
+                    )));
+                }
+                let mut trusted_certs_paths = vec![];
+                for path in unsafe {
+                    &*std::ptr::slice_from_raw_parts(
+                        trusted_certs_paths_ptr,
+                        trusted_certs_paths_len,
+                    )
+                } {
+                    let path = match unsafe { CStr::from_ptr(*path) }.to_str() {
+                        Ok(v) => v,
+                        Err(e) => return Box::<Error>::into_raw(Box::new(e.into())),
+                    };
+                    trusted_certs_paths.push(path.to_owned())
+                }
+                Some(trusted_certs_paths)
+            };
+
+            let policy = CocoVerifyPolicy {
+                verify_mode,
+                policy_ids,
+                trusted_certs_paths,
+            };
+
+            match verify_with_policy(policy, cert, &tokio_rt) {
+                Ok(v) => v,
+                Err(e) => return Box::<Error>::into_raw(Box::new(e)),
+            }
+        }
     };
 
     /* Set output */
-    unsafe { verify_policy_output_out.write(output) };
+    unsafe { verify_policy_output_out.write(VerifyPolicyOutput::Passed) };
 
     return std::ptr::null_mut();
 }

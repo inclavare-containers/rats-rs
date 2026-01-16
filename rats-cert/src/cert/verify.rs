@@ -1,9 +1,7 @@
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 
 use super::dice::cbor::{
-    parse_claims_buffer, parse_evidence_buffer_with_tag, parse_pubkey_hash_value_buffer,
+    generate_pubkey_hash_value_buffer, parse_claims_buffer, parse_evidence_buffer_with_tag,
 };
 use super::dice::extensions::{OID_TCG_DICE_ENDORSEMENT_MANIFEST, OID_TCG_DICE_TAGGED_EVIDENCE};
 use super::CLAIM_NAME_PUBLIC_KEY_HASH;
@@ -21,28 +19,43 @@ use anyhow::Context;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use const_oid::ObjectIdentifier;
-use itertools::Itertools;
 use pkcs8::der::referenced::OwnedToRef;
 use pkcs8::der::{Decode, DecodePem, Encode};
 use pkcs8::spki::AlgorithmIdentifierOwned;
 use signature::Verifier;
 use x509_cert::Certificate;
 
-/// Represents the different verification policies that can be applied to certificates.
-pub enum VerifyPolicy {
-    /// Verify with Local Attester
-    Local(ClaimsCheck),
-    /// Verify with CoCo policies. Should be used only when peer is using CoCo Attester
-    Coco {
-        /// The verify mode to select
-        verify_mode: CocoVerifyMode,
-        /// The policy ids needed to check
-        policy_ids: Vec<String>,
-        /// The path of all trusted certs to be used for checking CoCo AS token
-        trusted_certs_paths: Option<Vec<String>>,
-        /// Additional strategy for checking cliams (both builtin claims and custom claims)
-        claims_check: ClaimsCheck,
-    },
+/// Trait representing verification policies that can be applied to certificates.
+pub trait VerifyPolicy: Send + Sync {
+    /// The processed evidence type that implements GenericEvidence
+    type ProcessedEvidence: GenericEvidence;
+
+    /// Process the evidence and return the token (if needed)
+    fn process_evidence(
+        &self,
+        cbor_tag: u64,
+        raw_evidence: &[u8],
+    ) -> impl std::future::Future<Output = Result<Self::ProcessedEvidence>> + Send;
+
+    /// Verify the processed evidence with report data
+    fn verify(
+        &self,
+        evidence: &Self::ProcessedEvidence,
+        report_data: &ReportData,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
+}
+
+/// Local verification policy
+pub struct LocalVerifyPolicy;
+
+/// CoCo verification policy
+pub struct CocoVerifyPolicy {
+    /// The verify mode to select
+    pub verify_mode: CocoVerifyMode,
+    /// The policy ids needed to check
+    pub policy_ids: Vec<String>,
+    /// The path of all trusted certs to be used for checking CoCo AS token
+    pub trusted_certs_paths: Option<Vec<String>>,
 }
 
 pub enum CocoVerifyMode {
@@ -59,57 +72,35 @@ pub enum CocoVerifyMode {
     Token,
 }
 
-pub enum ClaimsCheck {
-    /// Verifies if the certificate contains a specific set of claims.
-    Contains(Claims),
-    /// Enables the use of a custom verification function, providing flexibility for specialized validation logic.
-    Custom(
-        Box<
-            dyn (FnOnce(&Claims) -> Pin<Box<dyn Future<Output = VerifyPolicyOutput> + Send>>)
-                + Send
-                + Sync,
-        >,
-    ),
-}
-
-/// Represents the outcome of a certificate verification.
-#[derive(PartialEq, Debug)]
-#[repr(C)]
-pub enum VerifyPolicyOutput {
-    /// Indicates the verification has failed.
-    Failed,
-    /// Indicates the verification has passed successfully.
-    Passed,
+#[allow(dead_code)]
+pub struct CertVerifier<P: VerifyPolicy> {
+    policy: P,
 }
 
 #[allow(dead_code)]
-pub struct CertVerifier {
-    policy: VerifyPolicy,
-}
-
-#[allow(dead_code)]
-impl CertVerifier {
-    pub fn new(policy: VerifyPolicy) -> Self {
+impl<P: VerifyPolicy> CertVerifier<P> {
+    pub fn new(policy: P) -> Self {
         Self { policy }
     }
 
-    pub async fn verify_pem(self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
+    pub async fn verify_pem(self, cert: &[u8]) -> Result<<P as VerifyPolicy>::ProcessedEvidence> {
         let cert = Certificate::from_pem(cert)
             .kind(ErrorKind::ParseCertError)
             .context("failed to parse certificate from pem")?;
-        let claims = self.verify_cert(&cert).await?;
-        self.check_claims(&claims).await
+        self.verify_cert(&cert).await
     }
 
-    pub async fn verify_der(self, cert: &[u8]) -> Result<VerifyPolicyOutput> {
+    pub async fn verify_der(self, cert: &[u8]) -> Result<<P as VerifyPolicy>::ProcessedEvidence> {
         let cert = Certificate::from_der(cert)
             .kind(ErrorKind::ParseCertError)
             .context("failed to parse certificate from der")?;
-        let claims = self.verify_cert(&cert).await?;
-        self.check_claims(&claims).await
+        self.verify_cert(&cert).await
     }
 
-    async fn verify_cert(&self, cert: &Certificate) -> Result<Claims> {
+    async fn verify_cert(
+        &self,
+        cert: &Certificate,
+    ) -> Result<<P as VerifyPolicy>::ProcessedEvidence> {
         /* check self-signed cert */
         verify_cert_signature(&cert, &cert).kind(ErrorKind::CertVerifySignatureFailed)?;
 
@@ -131,161 +122,124 @@ impl CertVerifier {
         let (cbor_tag, raw_evidence, _) = parse_evidence_buffer_with_tag(evidence_buffer)?;
         // Note: the implementation here is not compatible with the Interoperable RA-TLS now
 
-        /* Parse evidence, verify evidence and get claims from evidence */
-        let claims = match &self.policy {
-            VerifyPolicy::Local(_) => {
-                let evidence = Into::<Result<_>>::into(
-                        AutoEvidence::create_evidence_from_dice(cbor_tag, &raw_evidence),
-                    )
-                    .with_context(|| {
-                        format!(
-                            "Failed to parse evidence: cbor_tag: {:#x?}, raw_evidence: {:02x?}...({}bytes)",
-                            cbor_tag, &raw_evidence[..10],raw_evidence.len()
-                        )
-                    })?;
-                let tee_type = evidence.get_tee_type();
-                tracing::debug!("TEE type of this cert is {:?}", tee_type);
-                let verifier = AutoVerifier::new();
-                verifier
-                    .verify_evidence(&evidence, &ReportData::Claims(Claims::default()/* Pass an empty claims since we will check claims later */))
-                    .await?;
-                evidence.get_claims()?
-            }
-            VerifyPolicy::Coco {
-                verify_mode,
-                policy_ids,
-                trusted_certs_paths,
-                ..
-            } => {
-                let token = match verify_mode {
-                    CocoVerifyMode::Evidence {
-                        as_addr,
-                        as_is_grpc,
-                        as_headers,
-                    } => {
-                        let evidence = Into::<Result<_>>::into(CocoEvidence::create_evidence_from_dice(
-                            cbor_tag,
-                            &raw_evidence,
-                        ))
-                        .with_context(|| {
-                            format!(
-                                "Failed to parse CoCo evidence: cbor_tag: {:#x?}, raw_evidence: {:02x?}...({}bytes)",
-                                cbor_tag, &raw_evidence[..10],raw_evidence.len()
-                            )
-                        })?;
-                        tracing::debug!("Creating CocoConverter now. as_addr: {as_addr}, policy_ids: {policy_ids:?}, as_is_grpc: {}", *as_is_grpc );
-                        let converter =
-                            CocoConverter::new(&as_addr, &policy_ids, *as_is_grpc, as_headers)?;
-                        converter.convert(&evidence).await?
-                    }
-                    CocoVerifyMode::Token => {
-                        let token = Into::<Result<_>>::into(CocoAsToken::create_evidence_from_dice(
-                            cbor_tag,
-                            &raw_evidence,
-                        ))
-                        .with_context(|| {
-                            format!(
-                                "Failed to parse CoCo AS token: cbor_tag: {:#x?}, raw_evidence: {:02x?}...({}bytes)",
-                                cbor_tag, &raw_evidence[..10],raw_evidence.len()
-                            )
-                        })?;
-                        token
-                    }
-                };
-                let verifier = CocoVerifier::new(&trusted_certs_paths, &policy_ids)?;
-                verifier
-                    .verify_evidence(&token, &ReportData::Claims(Claims::default()/* Pass an empty claims since we will check claims later */))
-                    .await?;
-                token.get_claims()?
-            }
-        };
-
-        let pubkey_hash_value_buffer = {
-            let value = claims
-                .get(&format!(
-                    "customized_claims.runtime_data.{CLAIM_NAME_PUBLIC_KEY_HASH}"
-                ))
-                .ok_or_else(|| {
-                    Error::kind_with_msg(
-                        ErrorKind::CertVerifyPublicKeyHashFailed,
-                        format!(
-                            "failed to find claim with name '{}' from claims list with length {}",
-                            CLAIM_NAME_PUBLIC_KEY_HASH,
-                            claims.len()
-                        ),
-                    )
-                })?;
-
-            let value = value.as_str().with_context(|| {
-                format!(
-                    "the value of claim with name '{CLAIM_NAME_PUBLIC_KEY_HASH}' is not a string"
-                )
-            })?;
-
-            BASE64_STANDARD.decode(value)?
-        };
-
-        /* Verify pubkey_hash */
-        let (pubkey_hash_algo, pubkey_hash) =
-            parse_pubkey_hash_value_buffer(&pubkey_hash_value_buffer)?;
+        /* Prepare expected pubkey-hash claim */
         let spki_bytes = cert.tbs_certificate.subject_public_key_info.to_der()?;
-        let calculated_pubkey_hash = DefaultCrypto::hash(pubkey_hash_algo, &spki_bytes);
+        // TODO: Hash algorithm is currently hardcoded to SHA256.
+        // Future support should include extracting the hash algorithm from the evidence.
+        let pubkey_hash = DefaultCrypto::hash(HashAlgo::Sha256, &spki_bytes);
+        let pubkey_hash_value_buffer =
+            generate_pubkey_hash_value_buffer(HashAlgo::Sha256, &pubkey_hash)?;
 
-        if pubkey_hash != calculated_pubkey_hash {
-            Err(Error::kind_with_msg(
-                ErrorKind::CertVerifyPublicKeyHashFailed,
-                "hash of public key mismatch",
-            ))?
-        }
+        let mut expected_claims = Claims::new();
+        expected_claims.insert(
+            CLAIM_NAME_PUBLIC_KEY_HASH.into(),
+            serde_json::Value::String(BASE64_STANDARD.encode(pubkey_hash_value_buffer)),
+        );
+        let report_data = ReportData::Claims(expected_claims);
 
-        Ok(claims)
+        /* Process and verify evidence using the policy */
+        let evidence = self
+            .policy
+            .process_evidence(cbor_tag, &raw_evidence)
+            .await?;
+        self.policy.verify(&evidence, &report_data).await?;
+
+        Ok(evidence)
+    }
+}
+
+// Implementation of LocalVerifyPolicy
+impl VerifyPolicy for LocalVerifyPolicy {
+    type ProcessedEvidence = AutoEvidence;
+
+    async fn process_evidence(
+        &self,
+        cbor_tag: u64,
+        raw_evidence: &[u8],
+    ) -> Result<Self::ProcessedEvidence> {
+        let evidence = Into::<Result<_>>::into(AutoEvidence::create_evidence_from_dice(
+            cbor_tag,
+            raw_evidence,
+        ))
+        .with_context(|| {
+            format!(
+                "Failed to parse evidence: cbor_tag: {:#x?}, raw_evidence: {:02x?}...({}bytes)",
+                cbor_tag,
+                &raw_evidence[..10],
+                raw_evidence.len()
+            )
+        })?;
+        let tee_type = evidence.get_tee_type();
+        tracing::debug!("TEE type of this cert is {:?}", tee_type);
+        Ok(evidence)
     }
 
-    async fn check_claims(self, claims: &Claims) -> Result<VerifyPolicyOutput> {
-        tracing::debug!(
-            "There are {} claims parsed from the cert:\n{:?}",
-            claims.len(),
-            claims
-        );
+    async fn verify(
+        &self,
+        evidence: &Self::ProcessedEvidence,
+        report_data: &ReportData,
+    ) -> Result<()> {
+        let verifier = AutoVerifier::new();
+        verifier.verify_evidence(evidence, report_data).await?;
+        Ok(())
+    }
+}
 
-        match self.policy {
-            VerifyPolicy::Local(claims_check) | VerifyPolicy::Coco { claims_check, .. } => {
-                /* For CoCo, the checking of policy_ids have done in the CocoVerifier, so there is no need to check here. */
-                match claims_check {
-                    ClaimsCheck::Contains(expected_claims) => {
-                        let passed =
-                            expected_claims
-                                .iter()
-                                .all(|(name, expected)| match claims.get(name) {
-                                    Some(actually) => {
-                                        if expected != actually {
-                                            tracing::error!(
-                                                name,
-                                                ?expected,
-                                                ?actually,
-                                                "Claim mismatch detected"
-                                            );
-                                            return false;
-                                        }
-                                        true
-                                    }
-                                    None => {
-                                        tracing::error!(
-                                            "Claim missing detected, with claim name: {name}"
-                                        );
-                                        false
-                                    }
-                                });
-                        if passed {
-                            Ok(VerifyPolicyOutput::Passed)
-                        } else {
-                            Ok(VerifyPolicyOutput::Failed)
-                        }
-                    }
-                    ClaimsCheck::Custom(func) => Ok(func(claims).await),
-                }
+// Implementation of CocoVerifyPolicy
+impl VerifyPolicy for CocoVerifyPolicy {
+    type ProcessedEvidence = CocoAsToken;
+
+    async fn process_evidence(
+        &self,
+        cbor_tag: u64,
+        raw_evidence: &[u8],
+    ) -> Result<Self::ProcessedEvidence> {
+        let token = match &self.verify_mode {
+            CocoVerifyMode::Evidence {
+                as_addr,
+                as_is_grpc,
+                as_headers,
+            } => {
+                let evidence = Into::<Result<_>>::into(CocoEvidence::create_evidence_from_dice(
+                    cbor_tag,
+                    raw_evidence,
+                ))
+                .with_context(|| {
+                    format!(
+                        "Failed to parse CoCo evidence: cbor_tag: {:#x?}, raw_evidence: {:02x?}...({}bytes)",
+                        cbor_tag, &raw_evidence[..10],raw_evidence.len()
+                    )
+                })?;
+                tracing::debug!("Creating CocoConverter now. as_addr: {as_addr}, policy_ids: {:?}, as_is_grpc: {}", &self.policy_ids, *as_is_grpc );
+                let converter =
+                    CocoConverter::new(&as_addr, &self.policy_ids, *as_is_grpc, as_headers)?;
+                converter.convert(&evidence).await?
             }
-        }
+            CocoVerifyMode::Token => {
+                let token = Into::<Result<_>>::into(CocoAsToken::create_evidence_from_dice(
+                    cbor_tag,
+                    raw_evidence,
+                ))
+                .with_context(|| {
+                    format!(
+                        "Failed to parse CoCo AS token: cbor_tag: {:#x?}, raw_evidence: {:02x?}...({}bytes)",
+                        cbor_tag, &raw_evidence[..10],raw_evidence.len()
+                    )
+                })?;
+                token
+            }
+        };
+        Ok(token)
+    }
+
+    async fn verify(
+        &self,
+        evidence: &Self::ProcessedEvidence,
+        report_data: &ReportData,
+    ) -> Result<()> {
+        let verifier = CocoVerifier::new(&self.trusted_certs_paths, &self.policy_ids).await?;
+        verifier.verify_evidence(evidence, report_data).await?;
+        Ok(())
     }
 }
 
@@ -395,31 +349,9 @@ pub mod tests {
             .build(AsymmetricAlgo::P256)
             .await?;
         let cert = cert_bundle.cert_to_der()?;
-
-        assert_eq!(
-            CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims.clone())))
-                .verify_der(&cert)
-                .await?,
-            VerifyPolicyOutput::Passed
-        );
-
-        let mut claims_mismatch = claims.clone();
-        claims_mismatch.insert("key1".into(), "test-mismatch-value".into());
-        assert_eq!(
-            CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims_mismatch)))
-                .verify_der(&cert)
-                .await?,
-            VerifyPolicyOutput::Failed
-        );
-
-        let mut claims_missing = claims.clone();
-        claims_missing.insert("key3".into(), "test-missing-value".into());
-        assert_eq!(
-            CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims_missing)))
-                .verify_der(&cert)
-                .await?,
-            VerifyPolicyOutput::Failed
-        );
+        CertVerifier::new(LocalVerifyPolicy)
+            .verify_der(&cert)
+            .await?;
 
         Ok(())
     }
@@ -445,12 +377,9 @@ pub mod tests {
             .await?;
         let cert = cert_bundle.cert_to_der()?;
 
-        assert_eq!(
-            CertVerifier::new(VerifyPolicy::Local(ClaimsCheck::Contains(claims.clone())))
-                .verify_der(&cert)
-                .await?,
-            VerifyPolicyOutput::Failed
-        );
+        CertVerifier::new(LocalVerifyPolicy)
+            .verify_der(&cert)
+            .await?;
 
         Ok(())
     }
