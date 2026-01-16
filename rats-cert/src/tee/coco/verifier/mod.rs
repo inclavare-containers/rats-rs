@@ -104,9 +104,7 @@ impl CocoVerifier {
             return Err(Error::msg("runtime_data mismatch"));
         }
 
-        /* Check the evaluation-reports.
-         * The content format of evaluation-reports is documented here: https://github.com/confidential-containers/trustee/blob/43d56f3a4a92a1cc691f63a8e1311bcc0d2b3fc8/attestation-service/docs/example.token.json#L6
-         */
+        // Check expected policy-ids
         let allowed_policy_ids = if is_ear {
             let policy_id = claims_value
                 .pointer("/submods/cpu0/ear.appraisal-policy-id")
@@ -119,6 +117,9 @@ impl CocoVerifier {
             policy_set.insert(policy_id.to_string());
             policy_set
         } else {
+            /*
+             * The content format of evaluation-reports is documented here: https://github.com/confidential-containers/trustee/blob/43d56f3a4a92a1cc691f63a8e1311bcc0d2b3fc8/attestation-service/docs/example.token.json#L6
+             */
             claims_value
                 .get("evaluation-reports")
                 .and_then(|o| o.as_array())

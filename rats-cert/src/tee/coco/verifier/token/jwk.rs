@@ -54,29 +54,67 @@ async fn get_jwks_from_file_or_url(p: &str) -> Result<jwk::JwkSet, JwksGetError>
         "https" => {
             url.set_path(OPENID_CONFIG_URL_SUFFIX);
 
-            let oidc = get(url.as_str())
-                .await
-                .map_err(|e| JwksGetError::AccessFailed(e.to_string()))?
-                .json::<OpenIDConfig>()
-                .await
-                .map_err(|e| JwksGetError::DeserializeSource(e.to_string()))?;
+            let fut = async move {
+                let oidc = get(url.as_str())
+                    .await
+                    .map_err(|e| JwksGetError::AccessFailed(e.to_string()))?
+                    .json::<OpenIDConfig>()
+                    .await
+                    .map_err(|e| JwksGetError::DeserializeSource(e.to_string()))?;
 
-            let jwkset = get(oidc.jwks_uri)
-                .await
-                .map_err(|e| JwksGetError::AccessFailed(e.to_string()))?
-                .json::<jwk::JwkSet>()
-                .await
-                .map_err(|e| JwksGetError::DeserializeSource(e.to_string()))?;
+                let jwkset = get(oidc.jwks_uri)
+                    .await
+                    .map_err(|e| JwksGetError::AccessFailed(e.to_string()))?
+                    .json::<jwk::JwkSet>()
+                    .await
+                    .map_err(|e| JwksGetError::DeserializeSource(e.to_string()))?;
 
-            Ok(jwkset)
+                Ok(jwkset)
+            };
+
+            #[cfg(all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            ))]
+            // In wasm32 (web), the reqwest Response future is not `Send` but #[async_trait::async_trait] requires the function body to be Send. So we have to spawn it with tokio_with_wasm::task::spawn and await for it.
+            let ret = tokio_with_wasm::task::spawn(fut)
+                .await
+                .map_err(|e| JwksGetError::AccessFailed(e.to_string()))
+                .and_then(|e| e);
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            )))]
+            let ret = fut.await;
+            ret
         }
         "file" => {
-            let file_content = tokio::fs::read(url.path())
-                .await
-                .map_err(|e| JwksGetError::AccessFailed(format!("open {}: {}", url.path(), e)))?;
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            )))]
+            {
+                let file_content = tokio::fs::read(url.path()).await.map_err(|e| {
+                    JwksGetError::AccessFailed(format!("open {}: {}", url.path(), e))
+                })?;
 
-            serde_json::from_slice(&file_content)
-                .map_err(|e| JwksGetError::DeserializeSource(e.to_string()))
+                serde_json::from_slice(&file_content)
+                    .map_err(|e| JwksGetError::DeserializeSource(e.to_string()))
+            }
+            #[cfg(all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            ))]
+            {
+                Err(JwksGetError::AccessFailed(format!(
+                    "open {}: file access is not supported in wasm",
+                    url.path(),
+                )))
+            }
         }
         _ => Err(JwksGetError::InvalidSourcePath(format!(
             "unsupported scheme {} (must be either file or https)",
@@ -96,16 +134,34 @@ impl JwkAttestationTokenVerifier {
             }
         }
 
+        #[allow(unused_mut)]
         let mut trusted_certs = Vec::new();
         for path in &config.trusted_certs_paths {
-            let cert_content = tokio::fs::read(path).await.map_err(|_| {
-                JwksGetError::AccessFailed(format!("failed to read certificate {path}"))
-            })?;
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            )))]
+            {
+                let cert_content = tokio::fs::read(path).await.map_err(|e| {
+                    JwksGetError::AccessFailed(format!("failed to read certificate {path}: {e:?}"))
+                })?;
 
-            let cert_der = CertificateDer::from_pem_slice(&cert_content)
-                .with_context(|| format!("Failed to parse PEM certificate {}", path))?;
+                let cert_der = CertificateDer::from_pem_slice(&cert_content)
+                    .with_context(|| format!("Failed to parse PEM certificate {}", path))?;
 
-            trusted_certs.push(cert_der);
+                trusted_certs.push(cert_der);
+            }
+            #[cfg(all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            ))]
+            {
+                Err(JwksGetError::AccessFailed(format!(
+                    "failed to read certificate {path}: not supported in wasm"
+                )))?
+            }
         }
 
         Ok(Self {
