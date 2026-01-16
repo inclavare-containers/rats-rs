@@ -18,12 +18,9 @@ use rustls_webpki::ring::{
 use rustls_webpki::EndEntityCert;
 use serde::Deserialize;
 use serde_json::Value;
-use std::fs::File;
-use std::io::BufReader;
 use std::result::Result::Ok;
 use std::str::FromStr;
 use thiserror::Error;
-use tokio::fs;
 use x509_cert::der::{Decode, DecodePem, Encode};
 use x509_cert::Certificate;
 
@@ -74,10 +71,11 @@ async fn get_jwks_from_file_or_url(p: &str) -> Result<jwk::JwkSet, JwksGetError>
             Ok(jwkset)
         }
         "file" => {
-            let file = File::open(url.path())
+            let file_content = tokio::fs::read(url.path())
+                .await
                 .map_err(|e| JwksGetError::AccessFailed(format!("open {}: {}", url.path(), e)))?;
 
-            serde_json::from_reader(BufReader::new(file))
+            serde_json::from_slice(&file_content)
                 .map_err(|e| JwksGetError::DeserializeSource(e.to_string()))
         }
         _ => Err(JwksGetError::InvalidSourcePath(format!(
@@ -100,7 +98,7 @@ impl JwkAttestationTokenVerifier {
 
         let mut trusted_certs = Vec::new();
         for path in &config.trusted_certs_paths {
-            let cert_content = fs::read(path).await.map_err(|_| {
+            let cert_content = tokio::fs::read(path).await.map_err(|_| {
                 JwksGetError::AccessFailed(format!("failed to read certificate {path}"))
             })?;
 
