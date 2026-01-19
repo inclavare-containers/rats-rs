@@ -18,20 +18,27 @@ pub struct CocoVerifier {
 
 impl CocoVerifier {
     pub async fn new(
+        as_addr: &Option<String>,
         trusted_certs_paths: &Option<Vec<String>>,
         policy_ids: &Vec<String>,
     ) -> Result<Self> {
         let trusted_certs_paths = trusted_certs_paths.clone().unwrap_or_default();
 
-        let no_trust_anchor = trusted_certs_paths.is_empty();
-        if no_trust_anchor {
-            tracing::warn!("No trusted certificate provided, skip verification of JWK cert of Attestation Token");
-        };
+        // Check if any trust source is provided
+        let has_trust_source = !trusted_certs_paths.is_empty() || as_addr.is_some();
+
+        if !has_trust_source {
+            Err(Error::kind_with_msg(
+                ErrorKind::CocoVerifyTokenFailed,
+                format!("No trust source provided (neither trusted_certs_paths nor as_addr)"),
+            ))?
+        }
 
         let config = AttestationTokenVerifierConfig {
             trusted_certs_paths,
             trusted_jwk_sets: Default::default(),
-            insecure_key: no_trust_anchor,
+            as_addr: as_addr.clone(),
+            insecure_key: false,
         };
 
         let token_verifier = TokenVerifier::from_config(config).await?;
@@ -192,7 +199,7 @@ mod tests {
 
         let report_data = ReportData::Claims(Claims::default());
 
-        let verifier = CocoVerifier::new(&trusted_certs_paths, &policy_ids)
+        let verifier = CocoVerifier::new(&None, &trusted_certs_paths, &policy_ids)
             .await
             .expect("Failed to create CocoVerifier");
 
@@ -202,22 +209,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_simple_jwt_token() {
+        let (_dir, cert_path) =
+            write_pem_to_temp_file(include_str!("test_cases/simple.as-ca.pem"), "simple.as-ca.pem");
+
         run_jwt_verification_test(
             include_str!("test_cases/simple.jwt"),
             "Simple JWT",
             vec!["default".to_string()],
-            None,
+            Some(vec![cert_path]),
         )
         .await;
     }
 
     #[tokio::test]
     async fn test_verify_ear_jwt_token() {
+        let (_dir, cert_path) =
+            write_pem_to_temp_file(include_str!("test_cases/ear.as-ca.pem"), "ear.as-ca.pem");
+
         run_jwt_verification_test(
             include_str!("test_cases/ear.jwt"),
             "EAR JWT",
             vec!["default".to_string()],
-            None,
+            Some(vec![cert_path]),
         )
         .await;
     }
@@ -225,11 +238,14 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_verify_simple_jwt_token_policy_id_mismatch() {
+        let (_dir, cert_path) =
+            write_pem_to_temp_file(include_str!("test_cases/simple.as-ca.pem"), "simple.as-ca.pem");
+
         run_jwt_verification_test(
             include_str!("test_cases/simple.jwt"),
             "Simple JWT with wrong policy_id",
             vec!["non-existent-policy".to_string()],
-            None,
+            Some(vec![cert_path]),
         )
         .await;
     }
@@ -237,11 +253,14 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_verify_ear_jwt_token_policy_id_mismatch() {
+        let (_dir, cert_path) =
+            write_pem_to_temp_file(include_str!("test_cases/ear.as-ca.pem"), "ear.as-ca.pem");
+
         run_jwt_verification_test(
             include_str!("test_cases/ear.jwt"),
             "EAR JWT with wrong policy_id",
             vec!["non-existent-policy".to_string()],
-            None,
+            Some(vec![cert_path]),
         )
         .await;
     }
@@ -257,7 +276,7 @@ mod tests {
     #[should_panic]
     async fn test_verify_simple_jwt_token_with_wrong_trusted_cert() {
         let (_dir, wrong_cert_path) =
-            write_pem_to_temp_file(include_str!("test_cases/ear.as.pem"), "ear.as.pem");
+            write_pem_to_temp_file(include_str!("test_cases/ear.as-ca.pem"), "ear.as-ca.pem");
 
         run_jwt_verification_test(
             include_str!("test_cases/simple.jwt"),
@@ -272,13 +291,37 @@ mod tests {
     #[should_panic]
     async fn test_verify_ear_jwt_token_with_wrong_trusted_cert() {
         let (_dir, wrong_cert_path) =
-            write_pem_to_temp_file(include_str!("test_cases/simple.as.pem"), "simple.as.pem");
+            write_pem_to_temp_file(include_str!("test_cases/simple.as-ca.pem"), "simple.as-ca.pem");
 
         run_jwt_verification_test(
             include_str!("test_cases/ear.jwt"),
             "EAR JWT with wrong trusted cert",
             vec!["default".to_string()],
             Some(vec![wrong_cert_path]),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[should_panic]
+    async fn test_verify_simple_jwt_token_with_empty_trusted_certs() {
+        run_jwt_verification_test(
+            include_str!("test_cases/simple.jwt"),
+            "Simple JWT with empty trusted_certs",
+            vec!["default".to_string()],
+            None,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[should_panic]
+    async fn test_verify_ear_jwt_token_with_empty_trusted_certs() {
+        run_jwt_verification_test(
+            include_str!("test_cases/ear.jwt"),
+            "EAR JWT with empty trusted_certs",
+            vec!["default".to_string()],
+            None,
         )
         .await;
     }

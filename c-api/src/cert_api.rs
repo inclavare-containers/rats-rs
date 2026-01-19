@@ -373,6 +373,7 @@ impl TryFrom<VerifyPolicy> for RatsRsVerifyPolicy {
                     verify_mode,
                     policy_ids,
                     trusted_certs_paths,
+                    as_addr: None,
                 }
             }
         })

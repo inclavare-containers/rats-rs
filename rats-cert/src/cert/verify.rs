@@ -56,6 +56,8 @@ pub struct CocoVerifyPolicy {
     pub policy_ids: Vec<String>,
     /// The path of all trusted certs to be used for checking CoCo AS token
     pub trusted_certs_paths: Option<Vec<String>>,
+    /// Optional AS address to fetch trusted certificates from
+    pub as_addr: Option<String>,
 }
 
 pub enum CocoVerifyMode {
@@ -237,7 +239,12 @@ impl VerifyPolicy for CocoVerifyPolicy {
         evidence: &Self::ProcessedEvidence,
         report_data: &ReportData,
     ) -> Result<()> {
-        let verifier = CocoVerifier::new(&self.trusted_certs_paths, &self.policy_ids).await?;
+        let verifier = CocoVerifier::new(
+            &self.as_addr,
+            &self.trusted_certs_paths,
+            &self.policy_ids,
+        )
+        .await?;
         verifier.verify_evidence(evidence, report_data).await?;
         Ok(())
     }

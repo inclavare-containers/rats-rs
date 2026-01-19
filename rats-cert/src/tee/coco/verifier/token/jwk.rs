@@ -15,7 +15,7 @@ use rustls_webpki::ring::{
     ECDSA_P256_SHA256, ECDSA_P256_SHA384, ECDSA_P384_SHA256, ECDSA_P384_SHA384,
     RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA384, RSA_PKCS1_2048_8192_SHA512,
 };
-use rustls_webpki::EndEntityCert;
+use rustls_webpki::{EndEntityCert, ALL_VERIFICATION_ALGS};
 use serde::Deserialize;
 use serde_json::Value;
 use std::result::Result::Ok;
@@ -134,8 +134,15 @@ impl JwkAttestationTokenVerifier {
             }
         }
 
-        #[allow(unused_mut)]
         let mut trusted_certs = Vec::new();
+
+        // Fetch certificates from AS address if provided
+        if let Some(as_addr) = &config.as_addr {
+            let certs = Self::fetch_certs_from_as(as_addr).await?;
+            trusted_certs.extend(certs);
+        }
+
+        // Load certificates from file paths
         for path in &config.trusted_certs_paths {
             #[cfg(not(all(
                 target_arch = "wasm32",
@@ -169,6 +176,48 @@ impl JwkAttestationTokenVerifier {
             trusted_certs,
             insecure_key: config.insecure_key,
         })
+    }
+
+    /// Fetch trusted certificates from AS endpoint
+    async fn fetch_certs_from_as(as_addr: &str) -> anyhow::Result<Vec<CertificateDer<'static>>> {
+        let url = format!("{}/certificate", as_addr.trim_end_matches('/'));
+
+        let fut = async move {
+            let response = get(&url)
+                .await
+                .with_context(|| format!("Failed to fetch certificates chain from {}", url))?;
+
+            let cert_pem_chain = response.text().await.with_context(|| {
+                format!("Failed to read certificate chain response from {}", url)
+            })?;
+
+            let cert_ders = CertificateDer::pem_slice_iter(cert_pem_chain.as_bytes())
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|| {
+                    format!("Failed to parse PEM certificate chain from AS {}", url)
+                })?;
+
+            Ok(cert_ders)
+        };
+
+        #[cfg(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ))]
+        let ret = tokio_with_wasm::task::spawn(fut)
+            .await
+            .map_err(|e| anyhow!("Failed to spawn task: {}", e))
+            .and_then(|r| r);
+
+        #[cfg(not(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        )))]
+        let ret = fut.await;
+
+        ret
     }
 
     fn verify_jwk_endorsement(&self, key: &Jwk) -> anyhow::Result<()> {

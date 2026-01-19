@@ -24,6 +24,11 @@ pub struct AttestationTokenVerifierConfig {
     #[serde(default)]
     pub trusted_jwk_sets: Vec<String>,
 
+    /// Optional AS address to fetch trusted certificates from.
+    /// If provided, certificates will be fetched from this endpoint.
+    #[serde(default)]
+    pub as_addr: Option<String>,
+
     /// Whether the token signing key is (not) validated.
     /// If true, the attestation token can be modified in flight.
     /// This should only be set to true for testing.
