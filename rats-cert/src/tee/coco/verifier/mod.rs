@@ -117,8 +117,31 @@ impl CocoVerifier {
                 .pointer("/submods/cpu0/ear.appraisal-policy-id")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| {
-                    Error::msg("Can not found `ear.appraisal-policy-id` in EAR token")
+                    Error::msg("Can not found `/submods/cpu0/ear.appraisal-policy-id` in EAR token")
                 })?;
+
+            // Check ear.status and trustworthiness-vector, the value of ear.status should be one of (affirming, warning, contraindicated)
+            let status = claims_value
+                .pointer("/submods/cpu0/ear.status")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    Error::msg("Can not found `/submods/cpu0/ear.status` in EAR token")
+                })?;
+
+            let trustworthiness_vector = claims_value
+                .pointer("/submods/cpu0/ear.trustworthiness-vector")
+                .ok_or_else(|| {
+                    Error::msg(
+                        "Can not found `/submods/cpu0/ear.trustworthiness-vector` in EAR token",
+                    )
+                })?;
+
+            if status != "affirming" {
+                return Err(Error::msg(format!(
+                    "EAR status should be \"affirming\" but got {:?}, trustworthiness-vector: {}",
+                    status, trustworthiness_vector
+                )));
+            }
 
             let mut policy_set = HashSet::new();
             policy_set.insert(policy_id.to_string());
@@ -209,8 +232,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_simple_jwt_token() {
-        let (_dir, cert_path) =
-            write_pem_to_temp_file(include_str!("test_cases/simple.as-ca.pem"), "simple.as-ca.pem");
+        let (_dir, cert_path) = write_pem_to_temp_file(
+            include_str!("test_cases/simple.as-ca.pem"),
+            "simple.as-ca.pem",
+        );
 
         run_jwt_verification_test(
             include_str!("test_cases/simple.jwt"),
@@ -238,8 +263,10 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_verify_simple_jwt_token_policy_id_mismatch() {
-        let (_dir, cert_path) =
-            write_pem_to_temp_file(include_str!("test_cases/simple.as-ca.pem"), "simple.as-ca.pem");
+        let (_dir, cert_path) = write_pem_to_temp_file(
+            include_str!("test_cases/simple.as-ca.pem"),
+            "simple.as-ca.pem",
+        );
 
         run_jwt_verification_test(
             include_str!("test_cases/simple.jwt"),
@@ -290,8 +317,10 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_verify_ear_jwt_token_with_wrong_trusted_cert() {
-        let (_dir, wrong_cert_path) =
-            write_pem_to_temp_file(include_str!("test_cases/simple.as-ca.pem"), "simple.as-ca.pem");
+        let (_dir, wrong_cert_path) = write_pem_to_temp_file(
+            include_str!("test_cases/simple.as-ca.pem"),
+            "simple.as-ca.pem",
+        );
 
         run_jwt_verification_test(
             include_str!("test_cases/ear.jwt"),
