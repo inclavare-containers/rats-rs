@@ -4,12 +4,12 @@ syntax = "proto3";
 
 package attestation_agent;
 
-message GetEvidenceRequest {
+message GetCompositeEvidenceRequest {
     bytes RuntimeData = 1;
 }
 
-message GetEvidenceResponse {
-    bytes Evidence = 1;
+message GetCompositeEvidenceResponse {
+    map<string, bytes> Evidence = 1;
 }
 
 message GetTeeTypeRequest {}
@@ -19,6 +19,6 @@ message GetTeeTypeResponse {
 }
 
 service AttestationAgentService {
-    rpc GetEvidence(GetEvidenceRequest) returns (GetEvidenceResponse) {};
+    rpc GetCompositeEvidence(GetCompositeEvidenceRequest) returns (GetCompositeEvidenceResponse) {};
     rpc GetTeeType(GetTeeTypeRequest) returns (GetTeeTypeResponse) {};
 }

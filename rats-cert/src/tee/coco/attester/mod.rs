@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use canon_json::CanonicalFormatter;
 use serde::Serialize;
 use serde_json::json;
 
-use self::ttrpc_protocol::attestation_agent::{GetEvidenceRequest, GetTeeTypeRequest};
+use self::ttrpc_protocol::attestation_agent::{GetCompositeEvidenceRequest, GetTeeTypeRequest};
 use self::ttrpc_protocol::attestation_agent_ttrpc::AttestationAgentServiceClient;
 use super::evidence::AaTeeType;
 use super::evidence::CocoEvidence;
@@ -61,13 +63,13 @@ impl GenericAttester for CocoAttester {
             DefaultCrypto::hash(aa_runtime_data_hash_algo, &aa_runtime_data_bytes);
 
         // Get evidence from AA
-        let get_evidence_req = GetEvidenceRequest {
+        let get_evidence_req = GetCompositeEvidenceRequest {
             RuntimeData: aa_runtime_data_hash_value,
             ..Default::default()
         };
         let get_evidence_res = self
             .client
-            .get_evidence(
+            .get_composite_evidence(
                 ttrpc::context::with_timeout(self.timeout_nano),
                 &get_evidence_req,
             )
@@ -86,9 +88,17 @@ impl GenericAttester for CocoAttester {
             .kind(ErrorKind::CocoRequestAAFailed)?;
         let tee_type = AaTeeType::from_attestation_agent_str_id(&get_tee_type_res.tee);
 
+        let evidence: HashMap<AaTeeType, Vec<u8>> = get_evidence_res.Evidence
+            .into_iter()
+            .map(|(k, v)| {
+                let k = AaTeeType::from_attestation_agent_str_id(&k);
+                (k, v)
+            })
+            .collect();
+
         Ok(CocoEvidence::new(
             tee_type,
-            get_evidence_res.Evidence,
+            evidence,
             String::from_utf8(aa_runtime_data_bytes)?,
             aa_runtime_data_hash_algo,
         )?)

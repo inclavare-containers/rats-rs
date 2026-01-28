@@ -205,19 +205,29 @@ impl CocoRestfulConverter {
             AttestationServiceHashAlgo::from(in_evidence.get_aa_runtime_data_hash_algo()).str_id();
 
         let url = format!("{}/attestation", self.as_addr);
+        
+        // Parse runtime data once to avoid doing it in the map closure
+        let runtime_data_value: serde_json::Value = serde_json::from_str(in_evidence.aa_runtime_data_ref())
+            .context("Failed to parse runtime data as JSON")?;
+        
         let body = as_api::v1_6_0::AttestationRequest {
-            verification_requests: vec![as_api::v1_6_0::IndividualAttestationRequest {
-                tee: in_evidence
-                    .get_tee_type()
-                    .as_attestation_service_str_id()
-                    .to_owned(),
-                evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
-                init_data: None, // TODO: add support for init_data when support on AA is ready
-                runtime_data: Some(as_api::v1_6_0::RuntimeData::Structured(
-                    serde_json::from_str(in_evidence.aa_runtime_data_ref())?,
-                )),
-                runtime_data_hash_algorithm: Some(runtime_data_hash_algorithm.into()),
-            }],
+            verification_requests: in_evidence
+                .aa_evidence_ref()
+                .iter()
+                .map(
+                    |(tee_type, evidence_bytes)| {
+                        as_api::v1_6_0::IndividualAttestationRequest {
+                            tee: tee_type.as_attestation_service_str_id().to_owned(),
+                            evidence: URL_SAFE_NO_PAD.encode(evidence_bytes),
+                            init_data: None, // TODO: add support for init_data when support on AA is ready
+                            runtime_data: Some(as_api::v1_6_0::RuntimeData::Structured(
+                                runtime_data_value.clone(),
+                            )),
+                            runtime_data_hash_algorithm: Some(runtime_data_hash_algorithm.into()),
+                        }
+                    },
+                )
+                .collect(),
             policy_ids: self.policy_ids.clone(),
         };
         let client = self.client.clone();
@@ -288,7 +298,17 @@ impl CocoRestfulConverter {
                 .get_tee_type()
                 .as_attestation_service_str_id()
                 .to_owned(),
-            evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
+            evidence: URL_SAFE_NO_PAD.encode(
+                in_evidence
+                    .aa_evidence_ref()
+                    .iter()
+                    .next()
+                    .ok_or(Error::kind_with_msg(
+                        ErrorKind::InvalidParameter,
+                        "No evidence found",
+                    ))?
+                    .1,
+            ),
             init_data: None, // TODO: add support for init_data when support on AA is ready
             init_data_hash_algorithm: None,
             policy_ids: self.policy_ids.clone(),

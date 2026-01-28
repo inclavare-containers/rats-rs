@@ -98,20 +98,23 @@ impl CocoGrpcConverter {
             self.request_metadata.clone(),
             tonic::Extensions::new(),
     as_api::v1_6_0::AttestationRequest {
-            verification_requests: vec![as_api::v1_6_0::IndividualAttestationRequest {
-                tee: in_evidence
-                    .get_tee_type()
-                    .as_attestation_service_str_id()
-                    .to_owned(),
-                evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
-                runtime_data: Some(
-                    as_api::v1_6_0::individual_attestation_request::RuntimeData::StructuredRuntimeData(
-                        in_evidence.aa_runtime_data_ref().into(),
+
+            verification_requests: in_evidence.aa_evidence_ref()
+                .iter()
+                .map(|(tee_type, evidence_bytes)| as_api::v1_6_0::IndividualAttestationRequest {
+                    tee: tee_type
+                        .as_attestation_service_str_id()
+                        .to_owned(),
+                    evidence: URL_SAFE_NO_PAD.encode(evidence_bytes),
+                    runtime_data: Some(
+                        as_api::v1_6_0::individual_attestation_request::RuntimeData::StructuredRuntimeData(
+                            in_evidence.aa_runtime_data_ref().into(),
+                        ),
                     ),
-                ),
-                init_data: None, // TODO: add support for init_data when support on AA is ready
-                runtime_data_hash_algorithm: runtime_data_hash_algorithm.into(),
-            }],
+                    init_data: None, // TODO: add support for init_data when support on AA is ready
+                    runtime_data_hash_algorithm: runtime_data_hash_algorithm.into(),
+                })
+                .collect(),
             policy_ids: self.policy_ids.clone(),
         });
 
@@ -184,7 +187,17 @@ impl CocoGrpcConverter {
                     .get_tee_type()
                     .as_attestation_service_str_id()
                     .to_owned(),
-                evidence: URL_SAFE_NO_PAD.encode(in_evidence.aa_evidence_ref()),
+                evidence: URL_SAFE_NO_PAD.encode(
+                    in_evidence
+                        .aa_evidence_ref()
+                        .iter()
+                        .next()
+                        .ok_or(Error::kind_with_msg(
+                            ErrorKind::InvalidParameter,
+                            "No evidence found",
+                        ))?
+                        .1,
+                ),
                 init_data: None, // TODO: add support for init_data when support on AA is ready
                 init_data_hash_algorithm: "".into(),
                 policy_ids: self.policy_ids.clone(),
