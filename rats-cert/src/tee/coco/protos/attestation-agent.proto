@@ -1,4 +1,4 @@
-// Taken from https://github.com/confidential-containers/guest-components/blob/3e321fd8ff65ba84e666b192ca854d306a3c613e/attestation-agent/protos/attestation-agent.proto
+// Taken from https://github.com/confidential-containers/guest-components/blob/d6007e84d13db9066b95f7c3d2183d6ca3bb109f/protos/protos/attestation-agent/attestation-agent.proto
 
 syntax = "proto3";
 
@@ -12,6 +12,10 @@ message GetEvidenceResponse {
     bytes Evidence = 1;
 }
 
+message GetAdditionalEvidenceRequest {
+    bytes RuntimeData = 1;
+}
+
 message GetTeeTypeRequest {}
 
 message GetTeeTypeResponse {
@@ -20,5 +24,6 @@ message GetTeeTypeResponse {
 
 service AttestationAgentService {
     rpc GetEvidence(GetEvidenceRequest) returns (GetEvidenceResponse) {};
+    rpc GetAdditionalEvidence(GetAdditionalEvidenceRequest) returns (GetEvidenceResponse) {};
     rpc GetTeeType(GetTeeTypeRequest) returns (GetTeeTypeResponse) {};
 }

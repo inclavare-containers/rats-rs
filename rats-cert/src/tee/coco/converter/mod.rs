@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::evidence::{CocoAsToken, CocoEvidence};
 use crate::errors::*;
+use crate::tee::coco::evidence::AaTeeType;
 use crate::{
     crypto::HashAlgo,
     tee::{GenericConverter, TeeType},
@@ -100,5 +101,24 @@ impl GenericConverter for CocoConverter {
             CocoConverter::Grpc(converter) => converter.convert(in_evidence).await,
             CocoConverter::Restful(converter) => converter.convert(in_evidence).await,
         }
+    }
+}
+
+fn convert_additional_evidence(
+    in_evidence: &CocoEvidence,
+) -> Result<Vec<(AaTeeType, serde_json::Value)>> {
+    if let Some(json_bytes) = in_evidence.aa_additional_evidence_ref() {
+        let additional_evidence_map: HashMap<String, serde_json::Value> =
+            serde_json::from_slice(&json_bytes)
+                .context("Failed to parse JSON from additional evidence")?;
+
+        let additional_evidence_map = additional_evidence_map
+            .into_iter()
+            .map(|(k, v)| (AaTeeType::from_attestation_agent_str_id(&k), v))
+            .collect::<Vec<(AaTeeType, serde_json::Value)>>();
+
+        Ok(additional_evidence_map)
+    } else {
+        Ok(Vec::new())
     }
 }

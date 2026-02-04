@@ -9,7 +9,7 @@ use super::super::evidence::{CocoAsToken, CocoEvidence};
 use super::AttestationServiceHashAlgo;
 use crate::crypto::HashAlgo;
 use crate::errors::*;
-use crate::tee::coco::converter::CoCoNonce;
+use crate::tee::coco::converter::{convert_additional_evidence, CoCoNonce};
 use crate::tee::GenericConverter;
 use crate::tee::GenericEvidence;
 use crate::tee::TeeType;
@@ -98,7 +98,7 @@ impl CocoGrpcConverter {
             self.request_metadata.clone(),
             tonic::Extensions::new(),
     as_api::v1_6_0::AttestationRequest {
-            verification_requests: vec![as_api::v1_6_0::IndividualAttestationRequest {
+            verification_requests: std::iter::once(as_api::v1_6_0::IndividualAttestationRequest {
                 tee: in_evidence
                     .get_tee_type()
                     .as_attestation_service_str_id()
@@ -111,7 +111,20 @@ impl CocoGrpcConverter {
                 ),
                 init_data: None, // TODO: add support for init_data when support on AA is ready
                 runtime_data_hash_algorithm: runtime_data_hash_algorithm.into(),
-            }],
+            }).chain(
+                convert_additional_evidence(in_evidence)?
+                    .iter()
+                    .map(|(tee_type, evidence)| {
+                        as_api::v1_6_0::IndividualAttestationRequest {
+                            tee: tee_type.as_attestation_service_str_id().to_owned(),
+                            evidence: URL_SAFE_NO_PAD.encode(evidence.to_string()),
+                            init_data: None,
+                            runtime_data: None, // Always None for additional evidence
+                            runtime_data_hash_algorithm: "".to_owned(),
+                        }
+                    }),
+            )
+            .collect::<Vec<_>>(),
             policy_ids: self.policy_ids.clone(),
         });
 
@@ -172,6 +185,10 @@ impl CocoGrpcConverter {
 
     async fn convert_v1_5_2(&self, in_evidence: &CocoEvidence) -> Result<CocoAsToken> {
         tracing::debug!("Connect to grpc-as with protobuf version 1.5.2");
+
+        if in_evidence.aa_additional_evidence_ref().is_some() {
+            tracing::warn!("Additional evidence is not supported in grpc-as <= 1.5.2");
+        }
 
         let runtime_data_hash_algorithm =
             AttestationServiceHashAlgo::from(in_evidence.get_aa_runtime_data_hash_algo()).str_id();

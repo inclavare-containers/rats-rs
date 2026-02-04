@@ -30,6 +30,8 @@ rand = "0.8.5"
 reqwest = {version = "0.12", features = ["json", "rustls-tls"], default-features = false, optional = true}
 ring = {workspace = true, optional = true}
 rsa = {version = "0.9.7", features = ["sha2"], optional = true}
+rustls-pki-types = {version = "1.10.1", optional = true}
+rustls-webpki = {package = "rustls-webpki", version = "0.103.3", optional = true, default-features = false, features = ["alloc", "ring"]}
 serde = {version = "1.0", features = ["derive"]}
 serde_bytes = "0.11.15"
 serde_json = "1.0.138"
@@ -42,8 +44,6 @@ tdx-attest-rs = {git = "https://github.com/intel/SGXDataCenterAttestationPrimiti
 thiserror = "2.0.17"
 tracing = {workspace = true}
 ttrpc = {version = "0.8.4", optional = true}
-rustls-webpki = {package = "rustls-webpki", version = "0.103.3", optional = true, default-features = false, features = ["alloc", "ring"]}
-rustls-pki-types = {version = "1.10.1", optional = true}
 x509-cert = {version = "0.2.5", features = ["builder", "pem"], optional = true}
 zeroize = {workspace = true}
 
@@ -90,7 +90,17 @@ verifier-coco = [
   "dep:flatten-json-object",
 ]
 
-crypto-rustcrypto = ["dep:x509-cert", "dep:sha2", "dep:p256", "dep:rsa", "dep:pkcs8", "dep:const-oid", "dep:signature", "dep:rustls-webpki", "dep:rustls-pki-types"]
+crypto-rustcrypto = [
+  "dep:x509-cert",
+  "dep:sha2",
+  "dep:p256",
+  "dep:rsa",
+  "dep:pkcs8",
+  "dep:const-oid",
+  "dep:signature",
+  "dep:rustls-webpki",
+  "dep:rustls-pki-types",
+]
 default = ["crypto-rustcrypto", "attester-coco", "verifier-coco"]
 verifier-sgx-dcap = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]
 verifier-tdx = ["dep:intel-tee-quote-verification-rs", "dep:intel-dcap"]

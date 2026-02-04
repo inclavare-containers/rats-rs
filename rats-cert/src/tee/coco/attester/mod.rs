@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use canon_json::CanonicalFormatter;
 use serde::Serialize;
 use serde_json::json;
 
-use self::ttrpc_protocol::attestation_agent::{GetEvidenceRequest, GetTeeTypeRequest};
+use self::ttrpc_protocol::attestation_agent::{
+    GetAdditionalEvidenceRequest, GetEvidenceRequest, GetTeeTypeRequest,
+};
 use self::ttrpc_protocol::attestation_agent_ttrpc::AttestationAgentServiceClient;
 use super::evidence::AaTeeType;
 use super::evidence::CocoEvidence;
@@ -86,9 +90,41 @@ impl GenericAttester for CocoAttester {
             .kind(ErrorKind::CocoRequestAAFailed)?;
         let tee_type = AaTeeType::from_attestation_agent_str_id(&get_tee_type_res.tee);
 
+        // Attempt to get additional evidence from AA, but don't fail if not supported
+        // GetAdditionalEvidence returns GetAdditionalEvidenceResponse which has an 'additional_evidence' field (map)
+        // Attempt to get additional evidence from AA, but don't fail if not supported
+        // According to the proto file, GetAdditionalEvidence returns GetEvidenceResponse which has an 'Evidence' field
+        let additional_evidence_res = self.client.get_additional_evidence(
+            ttrpc::context::with_timeout(self.timeout_nano),
+            &GetAdditionalEvidenceRequest {
+                RuntimeData: Default::default(), // use empty user data here
+                ..Default::default()
+            },
+        );
+
+        let additional_evidence = match additional_evidence_res {
+            Ok(res) => {
+                // If GetAdditionalEvidence is supported, we get additional evidence as a single evidence blob
+                if res.Evidence.is_empty() {
+                    None
+                } else {
+                    Some(res.Evidence)
+                }
+            }
+            Err(error) => {
+                // If GetAdditionalEvidence is not supported by AA, return empty map
+                tracing::warn!(
+                    ?error,
+                    "GetAdditionalEvidence is not supported by AA, use empty additional evidence"
+                );
+                None
+            }
+        };
+
         Ok(CocoEvidence::new(
             tee_type,
             get_evidence_res.Evidence,
+            additional_evidence,
             String::from_utf8(aa_runtime_data_bytes)?,
             aa_runtime_data_hash_algo,
         )?)

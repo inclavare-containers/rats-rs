@@ -476,7 +476,6 @@ pub extern "C" fn rats_rs_verify_cert(
         Err(e) => return Box::<Error>::into_raw(Box::new(e)),
     };
 
-    
     let output = match tokio_rt.block_on(CertVerifier::new(verify_policy).verify_pem(cert)) {
         Ok(v) => v,
         Err(e) => return Box::<Error>::into_raw(Box::new(e)),

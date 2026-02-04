@@ -354,4 +354,20 @@ mod tests {
         )
         .await;
     }
+
+    #[tokio::test]
+    async fn test_verify_ear_with_additional_device_jwt_token() {
+        let (_dir, cert_path) = write_pem_to_temp_file(
+            include_str!("test_cases/ear_with_additional_device.as-ca.pem"),
+            "ear_with_additional_device.as-ca.pem",
+        );
+
+        run_jwt_verification_test(
+            include_str!("test_cases/ear_with_additional_device.jwt"),
+            "EAR JWT with additional device evidence",
+            vec!["default".to_string()],
+            Some(vec![cert_path]),
+        )
+        .await;
+    }
 }

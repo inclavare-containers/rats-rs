@@ -239,12 +239,8 @@ impl VerifyPolicy for CocoVerifyPolicy {
         evidence: &Self::ProcessedEvidence,
         report_data: &ReportData,
     ) -> Result<()> {
-        let verifier = CocoVerifier::new(
-            &self.as_addr,
-            &self.trusted_certs_paths,
-            &self.policy_ids,
-        )
-        .await?;
+        let verifier =
+            CocoVerifier::new(&self.as_addr, &self.trusted_certs_paths, &self.policy_ids).await?;
         verifier.verify_evidence(evidence, report_data).await?;
         Ok(())
     }
