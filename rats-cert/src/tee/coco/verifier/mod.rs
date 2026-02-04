@@ -113,39 +113,63 @@ impl CocoVerifier {
 
         // Check expected policy-ids
         let allowed_policy_ids = if is_ear {
-            let policy_id = claims_value
-                .pointer("/submods/cpu0/ear.appraisal-policy-id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    Error::msg("Can not found `/submods/cpu0/ear.appraisal-policy-id` in EAR token")
-                })?;
+            let submods = claims_value
+                .pointer("/submods")
+                .and_then(|v| v.as_object())
+                .ok_or_else(|| Error::msg("Can not found `/submods` object in EAR token"))?;
 
-            // Check ear.status and trustworthiness-vector, the value of ear.status should be one of (affirming, warning, contraindicated)
-            let status = claims_value
-                .pointer("/submods/cpu0/ear.status")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    Error::msg("Can not found `/submods/cpu0/ear.status` in EAR token")
-                })?;
+            let mut policy_ids = HashSet::new();
+            for (key, value) in submods {
+                let policy_id = value
+                    .pointer("/ear.appraisal-policy-id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        Error::msg(format!(
+                            "Can not found `/submods/{}/ear.appraisal-policy-id` in EAR token",
+                            key
+                        ))
+                    })?;
 
-            let trustworthiness_vector = claims_value
-                .pointer("/submods/cpu0/ear.trustworthiness-vector")
-                .ok_or_else(|| {
-                    Error::msg(
-                        "Can not found `/submods/cpu0/ear.trustworthiness-vector` in EAR token",
-                    )
-                })?;
+                // Check ear.status and trustworthiness-vector, the value of ear.status should be one of (affirming, warning, contraindicated)
+                let status = value
+                    .pointer("/ear.status")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        Error::msg(format!(
+                            "Can not found `/submods/{}/ear.status` in EAR token",
+                            key
+                        ))
+                    })?;
 
-            if status != "affirming" {
-                return Err(Error::msg(format!(
-                    "EAR status should be \"affirming\" but got {:?}, trustworthiness-vector: {}",
-                    status, trustworthiness_vector
-                )));
+                let trustworthiness_vector = value
+                    .pointer("/ear.trustworthiness-vector")
+                    .ok_or_else(|| {
+                        Error::msg(format!(
+                            "Can not found `/submods/{}/ear.trustworthiness-vector` in EAR token",
+                            key
+                        ))
+                    })?;
+
+                if status != "affirming" {
+                    return Err(Error::msg(format!(
+                            "EAR status should be \"affirming\" but got {:?} for {}, trustworthiness-vector: {}",
+                            status, key, trustworthiness_vector
+                        )));
+                }
+
+                policy_ids.insert(policy_id.to_owned());
             }
 
-            let mut policy_set = HashSet::new();
-            policy_set.insert(policy_id.to_string());
-            policy_set
+            if policy_ids.len() > 1 {
+                return Err(Error::msg(
+                    "Different policy IDs found in EAR token, which is not supported",
+                ));
+            }
+
+            if policy_ids.is_empty() {
+                return Err(Error::msg("No valid policy ID found in EAR token"));
+            }
+            policy_ids
         } else {
             /*
              * The content format of evaluation-reports is documented here: https://github.com/confidential-containers/trustee/blob/43d56f3a4a92a1cc691f63a8e1311bcc0d2b3fc8/attestation-service/docs/example.token.json#L6
