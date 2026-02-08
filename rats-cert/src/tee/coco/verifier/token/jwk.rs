@@ -138,8 +138,12 @@ impl JwkAttestationTokenVerifier {
 
         // Fetch certificates from AS address if provided
         if let Some(as_addr) = &config.as_addr {
-            let certs = Self::fetch_certs_from_as(as_addr).await?;
-            trusted_certs.extend(certs);
+            match Self::fetch_certs_from_as(as_addr).await {
+                Ok(certs) => trusted_certs.extend(certs),
+                Err(error) => {
+                    tracing::warn!(?error, "Failed to fetch certificates from AS")
+                }
+            }
         }
 
         // Load certificates from file paths
@@ -185,7 +189,9 @@ impl JwkAttestationTokenVerifier {
         let fut = async move {
             let response = get(&url)
                 .await
-                .with_context(|| format!("Failed to fetch certificates chain from {}", url))?;
+                .with_context(|| format!("Failed to fetch certificates chain from {}", url))?
+                .error_for_status()
+                .with_context(|| format!("HTTP error when fetching certificates from {}", url))?;
 
             let cert_pem_chain = response.text().await.with_context(|| {
                 format!("Failed to read certificate chain response from {}", url)
