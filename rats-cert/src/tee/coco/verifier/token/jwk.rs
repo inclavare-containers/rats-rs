@@ -2,13 +2,16 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+#[cfg(unix)]
+use crate::tee::coco::converter::restful::RESTFUL_AS_CONNECT_TIMEOUT_DEFAULT;
+
 use super::AttestationTokenVerifierConfig;
 use anyhow::{anyhow, bail, Context};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use jsonwebtoken::jwk::{AlgorithmParameters, EllipticCurve, Jwk};
 use jsonwebtoken::{decode, decode_header, jwk, Algorithm, DecodingKey, Header, Validation};
-use reqwest::{get, Url};
+use reqwest::Url;
 use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::{CertificateDer, TrustAnchor, UnixTime};
 use rustls_webpki::ring::{
@@ -18,8 +21,11 @@ use rustls_webpki::ring::{
 use rustls_webpki::{EndEntityCert, ALL_VERIFICATION_ALGS};
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::result::Result::Ok;
 use std::str::FromStr;
+#[cfg(unix)]
+use std::time::Duration;
 use thiserror::Error;
 use x509_cert::der::{Decode, DecodePem, Encode};
 use x509_cert::Certificate;
@@ -48,21 +54,35 @@ pub struct JwkAttestationTokenVerifier {
     insecure_key: bool,
 }
 
-async fn get_jwks_from_file_or_url(p: &str) -> Result<jwk::JwkSet, JwksGetError> {
+async fn get_jwks_from_file_or_url(
+    client: &reqwest::Client,
+    p: &str,
+) -> Result<jwk::JwkSet, JwksGetError> {
     let mut url = Url::parse(p).map_err(|e| JwksGetError::InvalidSourcePath(e.to_string()))?;
     match url.scheme() {
         "https" => {
             url.set_path(OPENID_CONFIG_URL_SUFFIX);
 
+            #[cfg(all(
+                target_arch = "wasm32",
+                target_vendor = "unknown",
+                target_os = "unknown"
+            ))]
+            let client = client.clone(); // Fix compile lifetime error
+
             let fut = async move {
-                let oidc = get(url.as_str())
+                let oidc = client
+                    .get(url.as_str())
+                    .send()
                     .await
                     .map_err(|e| JwksGetError::AccessFailed(e.to_string()))?
                     .json::<OpenIDConfig>()
                     .await
                     .map_err(|e| JwksGetError::DeserializeSource(e.to_string()))?;
 
-                let jwkset = get(oidc.jwks_uri)
+                let jwkset = client
+                    .get(oidc.jwks_uri)
+                    .send()
                     .await
                     .map_err(|e| JwksGetError::AccessFailed(e.to_string()))?
                     .json::<jwk::JwkSet>()
@@ -123,12 +143,22 @@ async fn get_jwks_from_file_or_url(p: &str) -> Result<jwk::JwkSet, JwksGetError>
     }
 }
 
+fn new_http_client() -> reqwest::Client {
+    let builder =
+        reqwest::Client::builder().user_agent(format!("rats-rs/{}", env!("CARGO_PKG_VERSION")));
+    #[cfg(unix)]
+    let builder = builder.connect_timeout(Duration::from_secs(RESTFUL_AS_CONNECT_TIMEOUT_DEFAULT));
+    builder.build().unwrap()
+}
+
 impl JwkAttestationTokenVerifier {
     pub async fn new(config: &AttestationTokenVerifierConfig) -> anyhow::Result<Self> {
+        let client = new_http_client();
+
         let mut trusted_jwk_sets = jwk::JwkSet { keys: Vec::new() };
 
         for path in config.trusted_jwk_sets.iter() {
-            match get_jwks_from_file_or_url(path).await {
+            match get_jwks_from_file_or_url(&client, path).await {
                 Ok(mut jwkset) => trusted_jwk_sets.keys.append(&mut jwkset.keys),
                 Err(e) => bail!("error getting JWKS: {:?}", e),
             }
@@ -138,7 +168,7 @@ impl JwkAttestationTokenVerifier {
 
         // Fetch certificates from AS address if provided
         if let Some(as_addr) = &config.as_addr {
-            match Self::fetch_certs_from_as(as_addr).await {
+            match Self::fetch_certs_from_as(&client, as_addr, &config.as_headers).await {
                 Ok(certs) => trusted_certs.extend(certs),
                 Err(error) => {
                     tracing::warn!(?error, "Failed to fetch certificates from AS")
@@ -183,11 +213,32 @@ impl JwkAttestationTokenVerifier {
     }
 
     /// Fetch trusted certificates from AS endpoint
-    async fn fetch_certs_from_as(as_addr: &str) -> anyhow::Result<Vec<CertificateDer<'static>>> {
+    async fn fetch_certs_from_as(
+        client: &reqwest::Client,
+        as_addr: &str,
+        as_headers: &Option<HashMap<String, String>>,
+    ) -> anyhow::Result<Vec<CertificateDer<'static>>> {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(as_headers) = as_headers {
+            for (k, v) in as_headers {
+                headers.insert(reqwest::header::HeaderName::from_str(k)?, v.parse()?);
+            }
+        }
+
         let url = format!("{}/certificate", as_addr.trim_end_matches('/'));
 
+        #[cfg(all(
+            target_arch = "wasm32",
+            target_vendor = "unknown",
+            target_os = "unknown"
+        ))]
+        let client = client.clone(); // Fix compile lifetime error
+
         let fut = async move {
-            let response = get(&url)
+            let response = client
+                .get(&url)
+                .headers(headers)
+                .send()
                 .await
                 .with_context(|| format!("Failed to fetch certificates chain from {}", url))?
                 .error_for_status()
@@ -409,9 +460,12 @@ mod tests {
     #[case("/does/not/exist/keys.jwks", true)]
     #[tokio::test]
     async fn test_source_path_validation(#[case] source_path: &str, #[case] expect_error: bool) {
+        let client = reqwest::Client::new();
         assert_eq!(
             expect_error,
-            get_jwks_from_file_or_url(source_path).await.is_err()
+            get_jwks_from_file_or_url(&client, source_path)
+                .await
+                .is_err()
         )
     }
 
@@ -426,6 +480,8 @@ mod tests {
     )]
     #[tokio::test]
     async fn test_source_reads(#[case] json: &str, #[case] expect_error: bool) {
+        let client = reqwest::Client::new();
+
         let tmp_dir = tempfile::tempdir().expect("to get tmpdir");
         let jwks_file = tmp_dir.path().join("test.jwks");
 
@@ -433,6 +489,9 @@ mod tests {
 
         let p = "file://".to_owned() + jwks_file.to_str().expect("to get path as str");
 
-        assert_eq!(expect_error, get_jwks_from_file_or_url(&p).await.is_err())
+        assert_eq!(
+            expect_error,
+            get_jwks_from_file_or_url(&client, &p).await.is_err()
+        )
     }
 }

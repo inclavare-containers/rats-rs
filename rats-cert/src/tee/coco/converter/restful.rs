@@ -23,7 +23,7 @@ use crate::tee::GenericEvidence;
 use crate::tee::TeeType;
 
 #[cfg(unix)]
-const RESTFUL_AS_CONNECT_TIMEOUT_DEFAULT: u64 = 5;
+pub const RESTFUL_AS_CONNECT_TIMEOUT_DEFAULT: u64 = 5;
 
 pub struct CocoRestfulConverter {
     as_addr: String,

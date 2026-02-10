@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashMap;
+
 use jwk::JwkAttestationTokenVerifier;
 use serde::Deserialize;
 use serde_json::Value;
@@ -28,6 +30,10 @@ pub struct AttestationTokenVerifierConfig {
     /// If provided, certificates will be fetched from this endpoint.
     #[serde(default)]
     pub as_addr: Option<String>,
+
+    /// Custom headers to be sent with attestation service requests
+    #[serde(default)]
+    pub as_headers: Option<HashMap<String, String>>,
 
     /// Whether the token signing key is (not) validated.
     /// If true, the attestation token can be modified in flight.

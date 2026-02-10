@@ -1,10 +1,11 @@
 use super::evidence::{CocoAsToken, CocoEvidence};
+use crate::cert::verify::AttestationServiceConfig;
 use crate::tee::ReportData;
 use crate::{errors::*, tee::GenericVerifier};
 
 use serde_json::Value;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 mod token;
 use token::{AttestationTokenVerifierConfig, TokenVerifier};
@@ -18,14 +19,23 @@ pub struct CocoVerifier {
 
 impl CocoVerifier {
     pub async fn new(
-        as_addr: &Option<String>,
+        as_addr_config: Option<AttestationServiceConfig>,
         trusted_certs_paths: &Option<Vec<String>>,
         policy_ids: &Vec<String>,
     ) -> Result<Self> {
+        if let Some(as_addr_config) = &as_addr_config {
+            if as_addr_config.as_is_grpc {
+                return Err(Error::kind_with_msg(
+                    ErrorKind::CocoVerifyTokenFailed,
+                    "Grpc is not supported for CoCo AS token verification",
+                ));
+            }
+        }
+
         let trusted_certs_paths = trusted_certs_paths.clone().unwrap_or_default();
 
         // Check if any trust source is provided
-        let has_trust_source = !trusted_certs_paths.is_empty() || as_addr.is_some();
+        let has_trust_source = !trusted_certs_paths.is_empty() || as_addr_config.is_some();
 
         if !has_trust_source {
             Err(Error::kind_with_msg(
@@ -37,7 +47,10 @@ impl CocoVerifier {
         let config = AttestationTokenVerifierConfig {
             trusted_certs_paths,
             trusted_jwk_sets: Default::default(),
-            as_addr: as_addr.clone(),
+            as_addr: as_addr_config.as_ref().map(|config| config.as_addr.clone()),
+            as_headers: as_addr_config
+                .as_ref()
+                .map(|config| config.as_headers.clone()),
             insecure_key: false,
         };
 
@@ -246,7 +259,7 @@ mod tests {
 
         let report_data = ReportData::Claims(Claims::default());
 
-        let verifier = CocoVerifier::new(&None, &trusted_certs_paths, &policy_ids)
+        let verifier = CocoVerifier::new(None, &trusted_certs_paths, &policy_ids)
             .await
             .expect("Failed to create CocoVerifier");
 
